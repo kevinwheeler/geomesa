@@ -107,7 +107,7 @@ class SpatioTemporalIntersectingIterator
     if (options.containsKey(DEFAULT_CACHE_SIZE_NAME))
       maxInMemoryIdCacheEntries = options.get(DEFAULT_CACHE_SIZE_NAME).toInt
 
-    if (!options.containsKey(GEOMESA_ITERATORS_IS_DENSITY_TYPE)) {
+    if (!options.containsKey(GEOMESA_ITERATORS_IS_DENSITY_TYPE) && !options.containsKey(GEOMESA_ITERATORS_IS_TEMPORAL_DENSITY_TYPE)) {
       deduplicate = IndexSchema.mayContainDuplicates(featureType)
     }
 

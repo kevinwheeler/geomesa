@@ -9,15 +9,17 @@ import org.geotools.feature.DefaultFeatureCollection
 import org.geotools.feature.visitor.{AbstractCalcResult, CalcResult, FeatureCalc}
 import org.geotools.process.factory.{DescribeParameter, DescribeProcess, DescribeResult}
 import org.geotools.util.NullProgressListener
+import org.joda.time.Interval
+import org.locationtech.geomesa.core.index.QueryHints
 import org.opengis.feature.Feature
 import org.opengis.feature.simple.SimpleFeature
 import org.opengis.filter.Filter
 
 @DescribeProcess(
-  title = "Geomesa Query",
-  description = "Performs a Geomesa optimized query using spatiotemporal indexes"
+  title = "Temporal Density Query",
+  description = "Determines the number of query results at different time bins"
 )
-class QueryProcess extends Logging {
+class TemporalDensityProcess extends Logging {
 
   @DescribeResult(description = "Output feature collection")
   def execute(
@@ -30,7 +32,16 @@ class QueryProcess extends Logging {
                  name = "filter",
                  min = 0,
                  description = "The filter to apply to the features collection")
-               filter: Filter
+               filter: Filter,
+               @DescribeParameter(
+                 name = "interval",
+                 description = "The time interval over which we want result density information")
+               interval: Interval,
+               @DescribeParameter(
+                 name = "numBins",
+                 min = 1,
+                 description = "How many bins we want to divide our time interval into.")
+               numBins: Int
                ): SimpleFeatureCollection = {
 
     logger.info("Attempting Geomesa query on type " + features.getClass.getName)
@@ -39,26 +50,24 @@ class QueryProcess extends Logging {
       logger.warn("WARNING: layer name in geoserver must match feature type name in geomesa")
     }
 
-    val visitor = new QueryVisitor(features, Option(filter).getOrElse(Filter.INCLUDE))
+    val visitor = new TemporalDensityVisitor(features, interval, numBins)
     features.accepts(visitor, new NullProgressListener)
     visitor.getResult.asInstanceOf[QueryResult].results
   }
 }
 
-class QueryVisitor(features: SimpleFeatureCollection,
-                   filter: Filter)
+class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interval, numBins: Int )
   extends FeatureCalc
           with Logging {
 
+  // JNH: Schema should be the schema from the TDI.
   val manualVisitResults = new DefaultFeatureCollection(null, features.getSchema)
-  val ff  = CommonFactoryFinder.getFilterFactory2
+ // val ff  = CommonFactoryFinder.getFilterFactory2
 
-  // Called for non AccumuloFeactureCollections
-  def visit(feature: Feature): Unit = {
-    val sf = feature.asInstanceOf[SimpleFeature]
-    if(filter.evaluate(sf)) {
-      manualVisitResults.add(sf)
-    }
+ //  Called for non AccumuloFeactureCollections
+   def visit(feature: Feature): Unit = {
+     val sf = feature.asInstanceOf[SimpleFeature]
+       manualVisitResults.add(sf)
   }
 
   var resultCalc: QueryResult = new QueryResult(manualVisitResults)
@@ -69,12 +78,11 @@ class QueryVisitor(features: SimpleFeatureCollection,
 
   def query(source: SimpleFeatureSource, query: Query) = {
     logger.info("Running Geomesa query on source type "+source.getClass.getName)
-    //
-    val combinedFilter = ff.and(query.getFilter, filter)
-    source.getFeatures(combinedFilter)
-
+    query.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
+    query.getHints.put(QueryHints.INTERVAL_KEY, interval)
+    query.getHints.put(QueryHints.NUM_BINS_KEY, numBins)
+    source.getFeatures(query)
   }
-
 }
 
-case class QueryResult(results: SimpleFeatureCollection) extends AbstractCalcResult
+//case class QueryResult(results: SimpleFeatureCollection) extends AbstractCalcResult

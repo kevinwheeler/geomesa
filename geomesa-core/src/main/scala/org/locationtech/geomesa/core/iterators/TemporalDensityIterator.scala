@@ -143,7 +143,7 @@ class TemporalDensityIterator(other: TemporalDensityIterator, env: IteratorEnvir
       featureBuilder.add(WKTUtils.read("Point(0 0)")) //BAD BAD BAD BAD BAD OKAY
       val feature = featureBuilder.buildFeature(Random.nextString(6))
       topTemporalDensityKey = Some(topSourceKey)
-      topTemporalDensityValue = Some(new Value(temporalDensityFeatureEncoder.encode(feature))) 
+      topTemporalDensityValue = Some(new Value(temporalDensityFeatureEncoder.encode(feature)))
     }
   }
 
@@ -224,7 +224,7 @@ object TemporalDensityIterator extends Logging {
       os.writeLong(date.getMillis)
       os.writeLong(count)
     }
-    
+
     os.flush()
     Base64.encodeBase64URLSafeString(baos.toByteArray)
   }

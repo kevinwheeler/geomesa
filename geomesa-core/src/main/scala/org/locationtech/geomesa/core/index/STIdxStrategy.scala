@@ -30,6 +30,7 @@ import org.geotools.feature.simple.SimpleFeatureTypeBuilder
 import org.geotools.filter.text.ecql.ECQL
 import org.joda.time.Interval
 import org.locationtech.geomesa.core.GEOMESA_ITERATORS_IS_DENSITY_TYPE
+import org.locationtech.geomesa.core.GEOMESA_ITERATORS_IS_TEMPORAL_DENSITY_TYPE
 import org.locationtech.geomesa.core.data._
 import org.locationtech.geomesa.core.data.FeatureEncoding.FeatureEncoding
 import org.locationtech.geomesa.core.filter._
@@ -142,8 +143,8 @@ class STIdxStrategy extends Strategy with Logging {
       case IndexOnlyIterator =>
         configureIndexIterator(ofilter, query, schema, featureEncoding, featureType)
       case SpatioTemporalIterator =>
-        val isDensity = query.getHints.containsKey(DENSITY_KEY)
-        configureSpatioTemporalIntersectingIterator(ofilter, featureType, schema, isDensity)
+        val isADensity = query.getHints.containsKey(DENSITY_KEY) || query.getHints.containsKey(TEMPORAL_DENSITY_KEY)
+        configureSpatioTemporalIntersectingIterator(ofilter, featureType, schema, isADensity)
     }
   }
 
@@ -182,13 +183,14 @@ class STIdxStrategy extends Strategy with Logging {
   def configureSpatioTemporalIntersectingIterator(filter: Option[Filter],
                                                   featureType: SimpleFeatureType,
                                                   schema: String,
-                                                  isDensity: Boolean): IteratorSetting = {
+                                                  isADensity: Boolean): IteratorSetting = {
     val cfg = new IteratorSetting(iteratorPriority_SpatioTemporalIterator,
       "within-" + randomPrintableString(5),
       classOf[SpatioTemporalIntersectingIterator])
     SpatioTemporalIntersectingIterator.setOptions(cfg, schema, filter)
     configureFeatureType(cfg, featureType)
     if (isDensity) cfg.addOption(GEOMESA_ITERATORS_IS_DENSITY_TYPE, "isDensity")
+    if (isTemporalDensity) cfg.addOption(GEOMESA_ITERATORS_IS_TEMPORAL_DENSITY_TYPE, "isTemporalDensity")
     cfg
   }
 

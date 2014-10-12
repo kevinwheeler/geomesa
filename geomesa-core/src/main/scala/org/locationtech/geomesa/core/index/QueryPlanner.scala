@@ -28,7 +28,7 @@ import org.locationtech.geomesa.core.data.FeatureEncoding.FeatureEncoding
 import org.locationtech.geomesa.core.data._
 import org.locationtech.geomesa.core.filter._
 import org.locationtech.geomesa.core.index.QueryHints._
-import org.locationtech.geomesa.core.iterators.{DeDuplicatingIterator, DensityIterator}
+import org.locationtech.geomesa.core.iterators.{DeDuplicatingIterator, DensityIterator, TemporalDensityIterator}
 import org.locationtech.geomesa.core.util.CloseableIterator._
 import org.locationtech.geomesa.core.util.{CloseableIterator, SelfClosingIterator}
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
@@ -84,16 +84,21 @@ case class QueryPlanner(schema: String,
                   output: ExplainerOutputType = log): CloseableIterator[Entry[Key,Value]] = {
     val ff = CommonFactoryFinder.getFilterFactory2
     val isDensity = query.getHints.containsKey(BBOX_KEY)
+    val isTemporalDensity = query.getHints.containsKey(NUM_BINS_KEY)
     val queries: Iterator[Query] =
       if(isDensity) {
         val env = query.getHints.get(BBOX_KEY).asInstanceOf[ReferencedEnvelope]
         val q1 = new Query(featureType.getTypeName, ff.bbox(ff.property(featureType.getGeometryDescriptor.getLocalName), env))
         Iterator(DataUtilities.mixQueries(q1, query, "geomesa.mixed.query"))
-      } else {
+      }
+      else if(isTemporalDensity){
+        val q1 = new Query(featureType.getTypeName)
+        Iterator(DataUtilities.mixQueries(q1, query, "geomesa.mixed.query"))
+        } else {
         splitQueryOnOrs(query, output)
       }
-
-    queries.ciFlatMap(configureScanners(acc, sft, _, isDensity, output))
+    val isADensity = isTemporalDensity || isDensity
+    queries.ciFlatMap(configureScanners(acc, sft, _, isADensity, output))
   }
   
   def splitQueryOnOrs(query: Query, output: ExplainerOutputType): Iterator[Query] = {
@@ -128,7 +133,7 @@ case class QueryPlanner(schema: String,
   private def configureScanners(acc: AccumuloConnectorCreator,
                        sft: SimpleFeatureType,
                        derivedQuery: Query,
-                       isDensity: Boolean,
+                       isADensity: Boolean,
                        output: ExplainerOutputType): SelfClosingIterator[Entry[Key, Value]] = {
     val strategy = QueryStrategyDecider.chooseStrategy(acc.catalogTableFormat(sft), sft, derivedQuery)
 
@@ -164,7 +169,11 @@ case class QueryPlanner(schema: String,
       uniqKVIter.flatMap { kv: Entry[Key, Value] =>
         DensityIterator.expandFeature(decoder.decode(kv.getValue))
       }
-    } else {
+    }
+    else if(query.getHints.containsKey(TEMPORAL_DENSITY_KEY)){
+      null//TODO reduce/sum the time bin counts coming from all of the tablet servers.
+    }
+    else {
       uniqKVIter.map { kv => decoder.decode(kv.getValue) }
     }
   }
@@ -174,9 +183,10 @@ case class QueryPlanner(schema: String,
     query match {
       case _: Query if query.getHints.containsKey(DENSITY_KEY)  =>
         SimpleFeatureTypes.createType(featureType.getTypeName, DensityIterator.DENSITY_FEATURE_STRING)
+      case _: Query if query.getHints.containsKey(TEMPORAL_DENSITY_KEY)  =>
+        SimpleFeatureTypes.createType(featureType.getTypeName, TemporalDensityIterator.TEMPORAL_DENSITY_FEATURE_STRING)
       case _: Query if query.getHints.get(TRANSFORM_SCHEMA) != null =>
         query.getHints.get(TRANSFORM_SCHEMA).asInstanceOf[SimpleFeatureType]
       case _ => featureType
     }
 }
-

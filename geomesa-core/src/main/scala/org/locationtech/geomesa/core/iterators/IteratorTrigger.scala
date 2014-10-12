@@ -85,10 +85,10 @@ object IteratorTrigger {
 
     // the Density Iterator is run in place of the SFFI. If it is requested we keep the SFFI config in the stack,
     // and do NOT run the IndexIterator. Wrap in an Option to keep clean logic below
-    val notDensity = Some(!useDensityIterator(query: Query))
+    val neitherDensity = Some(!useDensityIterator(query: Query) && !useTemporalDensityIterator(query: Query))
 
     // require both to be true
-    (isIndexTransform ++ isPassThroughFilter ++ notDensity).forall {_ == true}
+    (isIndexTransform ++ isPassThroughFilter ++ neitherDensity).forall {_ == true}
   }
 
   /**
@@ -103,7 +103,7 @@ object IteratorTrigger {
     // the Density Iterator is run in place of the SFFI. If it is requested we keep the SFFI config in the stack
     val useDensity = useDensityIterator(query: Query)
     // SFFI is needed if a transform and/or non-trivial filter is defined
-    transformDefs.isDefined || nonPassThroughFilter || useDensity
+    transformDefs.isDefined || nonPassThroughFilter || useDensity //TODO should the (TDI?) use temporalDensity?
   }
 
   /**
@@ -118,6 +118,7 @@ object IteratorTrigger {
     val attributeNames = schema.indexAttributeNames ++ indexedAttribute
     // check that, for each definition, the expression is simply the name of an index attribute in the schema
     theDefinitions.forall { aDef => attributeNames.contains(aDef.expression.toString) }
+ 
   }
 
   /**
@@ -134,6 +135,11 @@ object IteratorTrigger {
    * get the query hint that activates the Density Iterator
    */
   def useDensityIterator(query: Query) = query.getHints.containsKey(DENSITY_KEY)
+
+  /**
+   * get the query hint that activates the Density Iterator
+   */
+  def useTemporalDensityIterator(query: Query) = query.getHints.containsKey(TEMPORAL_DENSITY_KEY)
 
   /**
    * Scans the ECQL, query, and sourceSFTspec and determines which Iterators should be configured.

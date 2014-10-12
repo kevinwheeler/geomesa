@@ -151,7 +151,7 @@ trait Strategy {
       val interval = query.getHints.get(INTERVAL_KEY).asInstanceOf[Interval]
       val numBins = query.getHints.get(NUM_BINS_KEY).asInstanceOf[Int]
 
-      TemporalDensityIterator.configure(cfg, interval, buckets)
+      TemporalDensityIterator.configure(cfg, interval, numBins)
 
       cfg.addOption(DEFAULT_SCHEMA_NAME, schema)
       configureFeatureEncoding(cfg, featureEncoding)

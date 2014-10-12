@@ -143,8 +143,9 @@ class STIdxStrategy extends Strategy with Logging {
       case IndexOnlyIterator =>
         configureIndexIterator(ofilter, query, schema, featureEncoding, featureType)
       case SpatioTemporalIterator =>
-        val isADensity = query.getHints.containsKey(DENSITY_KEY) || query.getHints.containsKey(TEMPORAL_DENSITY_KEY)
-        configureSpatioTemporalIntersectingIterator(ofilter, featureType, schema, isADensity)
+        val isDensity = query.getHints.containsKey(DENSITY_KEY)
+        val isTemporalDensity = query.getHints.containsKey(TEMPORAL_DENSITY_KEY)
+        configureSpatioTemporalIntersectingIterator(ofilter, featureType, schema, isDensity, isTemporalDensity)
     }
   }
 
@@ -183,7 +184,8 @@ class STIdxStrategy extends Strategy with Logging {
   def configureSpatioTemporalIntersectingIterator(filter: Option[Filter],
                                                   featureType: SimpleFeatureType,
                                                   schema: String,
-                                                  isADensity: Boolean): IteratorSetting = {
+                                                  isDensity: Boolean,
+                                                  isTemporalDensity: Boolean): IteratorSetting = {
     val cfg = new IteratorSetting(iteratorPriority_SpatioTemporalIterator,
       "within-" + randomPrintableString(5),
       classOf[SpatioTemporalIntersectingIterator])

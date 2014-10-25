@@ -217,6 +217,14 @@ object TemporalDensityIterator extends Logging {
     new Interval(s, e)
   }
 
+  def combineTimeSeries(ts1: TimeSeries, ts2: TimeSeries) : TimeSeries = {
+    var resultTS = new collection.mutable.HashMap[DateTime, Long]();
+    for (key <- (ts1.keySet ++ ts2.keySet)) {
+      resultTS.put(key, ts1.getOrElse(key, 0L) + ts2.getOrElse(key,0L))
+    }
+    resultTS
+  }
+
   def encodeTimeSeries(timeSeries: TimeSeries): String = {
     val baos = new ByteArrayOutputStream()
     val os = new DataOutputStream(baos)

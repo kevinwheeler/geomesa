@@ -148,10 +148,10 @@ trait Strategy {
         "topfilter-" + randomPrintableString(5),
         clazz)
 
-      val interval = query.getHints.get(INTERVAL_KEY).asInstanceOf[Interval]
-      val numBins = query.getHints.get(NUM_BINS_KEY).asInstanceOf[Int]
+      val interval = query.getHints.get(TIME_INTERVAL_KEY).asInstanceOf[Interval]
+      val buckets = query.getHints.get(TIME_BUCKETS_KEY).asInstanceOf[Int]
 
-      TemporalDensityIterator.configure(cfg, interval, numBins)
+      TemporalDensityIterator.configure(cfg, interval, buckets)
 
       cfg.addOption(DEFAULT_SCHEMA_NAME, schema)
       configureFeatureEncoding(cfg, featureEncoding)

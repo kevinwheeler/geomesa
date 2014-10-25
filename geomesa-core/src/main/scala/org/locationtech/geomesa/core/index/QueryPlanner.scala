@@ -29,10 +29,15 @@ import org.locationtech.geomesa.core.data._
 import org.locationtech.geomesa.core.filter._
 import org.locationtech.geomesa.core.index.QueryHints._
 import org.locationtech.geomesa.core.iterators.{DeDuplicatingIterator, DensityIterator, TemporalDensityIterator}
+import org.locationtech.geomesa.core.iterators.TemporalDensityIterator._
 import org.locationtech.geomesa.core.util.CloseableIterator._
 import org.locationtech.geomesa.core.util.{CloseableIterator, SelfClosingIterator}
+import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
+import org.locationtech.geomesa.utils.text.WKTUtils
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
+
+import scala.util.Random
 
 object QueryPlanner {
   val iteratorPriority_RowRegex                        = 0
@@ -84,7 +89,7 @@ case class QueryPlanner(schema: String,
                   output: ExplainerOutputType = log): CloseableIterator[Entry[Key,Value]] = {
     val ff = CommonFactoryFinder.getFilterFactory2
     val isDensity = query.getHints.containsKey(BBOX_KEY)
-    val isTemporalDensity = query.getHints.containsKey(NUM_BINS_KEY)
+    val isTemporalDensity = query.getHints.containsKey(TIME_BUCKETS_KEY)
     val queries: Iterator[Query] =
       if(isDensity) {
         val env = query.getHints.get(BBOX_KEY).asInstanceOf[ReferencedEnvelope]
@@ -171,7 +176,22 @@ case class QueryPlanner(schema: String,
       }
     }
     else if(query.getHints.containsKey(TEMPORAL_DENSITY_KEY)){
-      null//TODO reduce/sum the time bin counts coming from all of the tablet servers.
+      val timeSeriesStrings = uniqKVIter.map { kv:Entry[Key, Value] =>
+        decoder.decode(kv.getValue).getAttribute(ENCODED_TIME_SERIES).toString
+      }
+
+      val summedTimeSeries = timeSeriesStrings.map { s =>
+        decodeTimeSeries(s)
+      }.reduce(combineTimeSeries(_,_))
+
+      val featureBuilder = AvroSimpleFeatureFactory.featureBuilder(returnSFT)
+      featureBuilder.reset()
+      featureBuilder.add(TemporalDensityIterator.encodeTimeSeries(summedTimeSeries))
+      featureBuilder.add(WKTUtils.read("Point(0 0)")) //BAD BAD BAD BAD BAD OKAY
+      val result = featureBuilder.buildFeature(Random.nextString(6))
+
+      //TODO is this right? How do I wrap the sf in a closeable iterator?
+      List(result).iterator
     }
     else {
       uniqKVIter.map { kv => decoder.decode(kv.getValue) }

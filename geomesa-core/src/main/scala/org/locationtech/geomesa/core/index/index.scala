@@ -86,12 +86,12 @@ package object index {
 
   object QueryHints {
     val DENSITY_KEY = new ClassKey(classOf[java.lang.Boolean])
-    val TEMPORAL_DENSITY_KEY = new ClassKey(classOf[java.lang.Boolean])
     val WIDTH_KEY   = new IntegerKey(256)
     val HEIGHT_KEY  = new IntegerKey(256)
     val BBOX_KEY    = new ClassKey(classOf[ReferencedEnvelope])
-    val INTERVAL_KEY = new ClassKey(classOf[org.joda.time.Interval])
-    val NUM_BINS_KEY = new IntegerKey(256)
+    val TEMPORAL_DENSITY_KEY = new ClassKey(classOf[java.lang.Boolean])
+    val TIME_INTERVAL_KEY = new ClassKey(classOf[org.joda.time.Interval])
+    val TIME_BUCKETS_KEY = new IntegerKey(256)
   }
 
   type ExplainerOutputType = ( => String) => Unit

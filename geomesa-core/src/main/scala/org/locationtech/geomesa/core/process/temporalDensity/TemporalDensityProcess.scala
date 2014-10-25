@@ -17,7 +17,7 @@ import org.opengis.filter.Filter
 
 @DescribeProcess(
   title = "Temporal Density Query",
-  description = "Determines the number of query results at different time bins"
+  description = "Determines the number of query results at different time buckets within an interval"
 )
 class TemporalDensityProcess extends Logging {
 
@@ -38,10 +38,10 @@ class TemporalDensityProcess extends Logging {
                  description = "The time interval over which we want result density information")
                interval: Interval,
                @DescribeParameter(
-                 name = "numBins",
+                 name = "buckets",
                  min = 1,
-                 description = "How many bins we want to divide our time interval into.")
-               numBins: Int
+                 description = "How many buckets we want to divide our time interval into.")
+               buckets: Int
                ): SimpleFeatureCollection = {
 
     logger.info("Attempting Geomesa query on type " + features.getClass.getName)
@@ -50,13 +50,13 @@ class TemporalDensityProcess extends Logging {
       logger.warn("WARNING: layer name in geoserver must match feature type name in geomesa")
     }
 
-    val visitor = new TemporalDensityVisitor(features, interval, numBins)
+    val visitor = new TemporalDensityVisitor(features, interval, buckets)
     features.accepts(visitor, new NullProgressListener)
     visitor.getResult.asInstanceOf[QueryResult].results
   }
 }
 
-class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interval, numBins: Int )
+class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interval, buckets: Int )
   extends FeatureCalc
           with Logging {
 
@@ -79,8 +79,8 @@ class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interv
   def query(source: SimpleFeatureSource, query: Query) = {
     logger.info("Running Geomesa query on source type "+source.getClass.getName)
     query.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
-    query.getHints.put(QueryHints.INTERVAL_KEY, interval)
-    query.getHints.put(QueryHints.NUM_BINS_KEY, numBins)
+    query.getHints.put(QueryHints.TIME_INTERVAL_KEY, interval)
+    query.getHints.put(QueryHints.TIME_BUCKETS_KEY, buckets)
     source.getFeatures(query)
   }
 }

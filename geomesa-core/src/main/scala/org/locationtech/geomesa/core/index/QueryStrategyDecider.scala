@@ -39,7 +39,7 @@ object QueryStrategyDecider {
 
   def chooseNewStrategy(sft: SimpleFeatureType, query: Query): Strategy = {
     val filter = query.getFilter
-    val isADensity = query.getHints.containsKey(BBOX_KEY) || query.getHints.contains(NUM_BINS_KEY)
+    val isADensity = query.getHints.containsKey(BBOX_KEY) || query.getHints.contains(TIME_BUCKETS_KEY)
 
     if (isADensity) {
       // TODO GEOMESA-322 use other strategies with density iterator

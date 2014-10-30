@@ -183,7 +183,7 @@ class TemporalDensityIterator(other: TemporalDensityIterator, env: IteratorEnvir
 
 object TemporalDensityIterator extends Logging {
 
-  val BOUNDS_KEY = "geomesa.temporal.density.bounds"
+  val INTERVAL_KEY = "geomesa.temporal.density.bounds"
   val BUCKETS_KEY = "geomesa.temporal.density.buckets"
   val ENCODED_TIME_SERIES: String = "timeseries"
   val TEMPORAL_DENSITY_FEATURE_STRING = s"$ENCODED_TIME_SERIES:String,geom:Geometry"
@@ -200,7 +200,7 @@ object TemporalDensityIterator extends Logging {
   //might change interval to date + duration
   //look up avro to serialize intervals
   def setTimeBounds(iterSettings: IteratorSetting, interval: Interval) : Unit = {
-    iterSettings.addOption(BOUNDS_KEY,  s"${interval.getStart.getMillis},${interval.getEnd.getMillis}")
+    iterSettings.addOption(INTERVAL_KEY,  s"${interval.getStart.getMillis},${interval.getEnd.getMillis}")
       /*some way to serialize date and duration(WKTUtils.write(poly))*/
   }
 
@@ -213,7 +213,7 @@ object TemporalDensityIterator extends Logging {
   }
 
   def getTimeBounds(options: ju.Map[String, String]): Interval = {
-    val Array(s, e) = options.get(BOUNDS_KEY).split(",").map(_.toLong)
+    val Array(s, e) = options.get(INTERVAL_KEY).split(",").map(_.toLong)
     new Interval(s, e)
   }
 

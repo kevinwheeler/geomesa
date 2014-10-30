@@ -1,4 +1,4 @@
-package org.locationtech.geomesa.core.process.query
+package org.locationtech.geomesa.core.process.temporalDensity
 
 import com.typesafe.scalalogging.slf4j.Logging
 import org.geotools.data.Query
@@ -28,11 +28,11 @@ class TemporalDensityProcess extends Logging {
                  description = "The feature set on which to query")
                features: SimpleFeatureCollection,
 
-               @DescribeParameter(
-                 name = "filter",
-                 min = 0,
-                 description = "The filter to apply to the features collection")
-               filter: Filter,
+//               @DescribeParameter(
+//                 name = "filter",
+//                 min = 0,
+//                 description = "The filter to apply to the features collection")
+//               filter: Filter,
                @DescribeParameter(
                  name = "interval",
                  description = "The time interval over which we want result density information")
@@ -44,7 +44,7 @@ class TemporalDensityProcess extends Logging {
                buckets: Int
                ): SimpleFeatureCollection = {
 
-    logger.info("Attempting Geomesa query on type " + features.getClass.getName)
+    logger.info("Attempting Geomesa temporal density on type " + features.getClass.getName)
 
     if(features.isInstanceOf[ReTypingFeatureCollection]) {
       logger.warn("WARNING: layer name in geoserver must match feature type name in geomesa")
@@ -52,7 +52,7 @@ class TemporalDensityProcess extends Logging {
 
     val visitor = new TemporalDensityVisitor(features, interval, buckets)
     features.accepts(visitor, new NullProgressListener)
-    visitor.getResult.asInstanceOf[QueryResult].results
+    visitor.getResult.asInstanceOf[TDResult].results
   }
 }
 
@@ -64,17 +64,17 @@ class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interv
   val manualVisitResults = new DefaultFeatureCollection(null, features.getSchema)
  // val ff  = CommonFactoryFinder.getFilterFactory2
 
- //  Called for non AccumuloFeactureCollections
+ //  Called for non AccumuloFeatureCollections
    def visit(feature: Feature): Unit = {
      val sf = feature.asInstanceOf[SimpleFeature]
        manualVisitResults.add(sf)
   }
 
-  var resultCalc: QueryResult = new QueryResult(manualVisitResults)
+  var resultCalc: TDResult = new TDResult(manualVisitResults)
 
   override def getResult: CalcResult = resultCalc
 
-  def setValue(r: SimpleFeatureCollection) = resultCalc = QueryResult(r)
+  def setValue(r: SimpleFeatureCollection) = resultCalc = TDResult(r)
 
   def query(source: SimpleFeatureSource, query: Query) = {
     logger.info("Running Geomesa query on source type "+source.getClass.getName)
@@ -85,4 +85,4 @@ class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interv
   }
 }
 
-//case class QueryResult(results: SimpleFeatureCollection) extends AbstractCalcResult
+case class TDResult(results: SimpleFeatureCollection) extends AbstractCalcResult

@@ -107,9 +107,6 @@ class TemporalDensityIteratorTest extends Specification {
     val q = new Query("test", ECQL.toFilter(query))
     val geom = q.getFilter.accept(ExtractBoundsFilterVisitor.BOUNDS_VISITOR, null).asInstanceOf[Envelope]
     q.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
-    q.getHints.put(QueryHints.BBOX_KEY, new ReferencedEnvelope(geom, DefaultGeographicCRS.WGS84))
-    q.getHints.put(QueryHints.WIDTH_KEY, 500)
-    q.getHints.put(QueryHints.HEIGHT_KEY, 500)
     q.getHints.put(QueryHints.TIME_INTERVAL_KEY, new Interval(new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).getMillis, new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).getMillis))
     q.getHints.put(QueryHints.TIME_BUCKETS_KEY, 24)
     q

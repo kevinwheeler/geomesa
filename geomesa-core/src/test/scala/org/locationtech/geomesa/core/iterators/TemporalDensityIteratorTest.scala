@@ -106,7 +106,7 @@ class TemporalDensityIteratorTest extends Specification {
   def getQuery(query: String): Query = {
     val q = new Query("test", ECQL.toFilter(query))
     val geom = q.getFilter.accept(ExtractBoundsFilterVisitor.BOUNDS_VISITOR, null).asInstanceOf[Envelope]
-    q.getHints.put(QueryHints.DENSITY_KEY, java.lang.Boolean.TRUE)
+    q.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
     q.getHints.put(QueryHints.BBOX_KEY, new ReferencedEnvelope(geom, DefaultGeographicCRS.WGS84))
     q.getHints.put(QueryHints.WIDTH_KEY, 500)
     q.getHints.put(QueryHints.HEIGHT_KEY, 500)
@@ -124,6 +124,7 @@ class TemporalDensityIteratorTest extends Specification {
     val encodedFeatures = (0 until 150).toArray.map{
       i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
     }
+
     val fs = loadFeatures(ds, sft, encodedFeatures)
     //  the iterator compresses the results into bins.
     //  there are less than 150 bin because they are all in the same point in time
@@ -148,9 +149,6 @@ class TemporalDensityIteratorTest extends Specification {
       val sf = iter.head.asInstanceOf[SimpleFeature]
       iter must not beNull
 
-      val total = iter.map(_.getAttribute("weight").asInstanceOf[Double]).sum
-
-      total should be equalTo 150
       val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
       val totalCount = timeSeries.map { case (dateTime, count) => count}.sum
 
@@ -165,7 +163,7 @@ class TemporalDensityIteratorTest extends Specification {
     "maintain weight irrespective of point" in {
       val ds = createDataStore(sft, 1)
       val encodedFeatures = (0 until 150).toArray.map {
-        i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC), s"POINT(-77.$i 38.$i)")
+        i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, s"POINT(-77.$i 38.$i)")
       }
       val fs = loadFeatures(ds, sft, encodedFeatures)
 
@@ -173,7 +171,7 @@ class TemporalDensityIteratorTest extends Specification {
 
       val results = fs.getFeatures(q)
       val sfList = results.features().toList
-      println(sfList)
+
       val sf = sfList.head.asInstanceOf[SimpleFeature]
       val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
 

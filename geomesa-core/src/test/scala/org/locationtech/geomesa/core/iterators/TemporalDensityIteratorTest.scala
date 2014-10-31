@@ -117,14 +117,13 @@ class TemporalDensityIteratorTest extends Specification {
     val sft = SimpleFeatureTypes.createType("test", spec)
     val builder = AvroSimpleFeatureFactory.featureBuilder(sft)
     sft.getUserData.put(Constants.SF_PROPERTY_START_TIME, "dtg")
+
     val ds = createDataStore(sft,0)
     val encodedFeatures = (0 until 150).toArray.map{
       i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
     }
-
     val fs = loadFeatures(ds, sft, encodedFeatures)
-    //  the iterator compresses the results into bins.
-    //  there are less than 150 bin because they are all in the same point in time
+
     "reduce total features returned" in {
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)") //time interval spans the whole datastore queried values
       val results = fs.getFeatures(q)
@@ -133,10 +132,9 @@ class TemporalDensityIteratorTest extends Specification {
       (iter must not).beNull
 
       iter.length should be lessThan 150
-      iter.length should be equalTo 1 // one simpleFeature returned
+      iter.length should be equalTo 1
     }
 
-    //  checks that all the buckets' weights returned add up to 150
     "maintan total weights of time" in {
 
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")//time interval spans the whole datastore queried values
@@ -155,9 +153,7 @@ class TemporalDensityIteratorTest extends Specification {
 
     }
 
-    // The points varied but that should have no effect on the bucketing of the timeseries
-    //  Checks that all the buckets weight sum to 150, the original number of rows
-    "maintain weight irrespective of point" in {
+    "maintain total irrespective of point" in {
       val ds = createDataStore(sft, 1)
       val encodedFeatures = (0 until 150).toArray.map {
         i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, s"POINT(-77.$i 38.$i)")
@@ -178,8 +174,6 @@ class TemporalDensityIteratorTest extends Specification {
       timeSeries.size should be equalTo 1
     }
 
-    //this test actually varies the time therefore they should be split into seperate buckets
-    //checks that there are 24 buckets, and that all the counts across the buckets sum to 150
     "correctly bin off of time intervals" in {
       val ds = createDataStore(sft, 2)
       val encodedFeatures = (0 until 48).toArray.map {
@@ -190,8 +184,8 @@ class TemporalDensityIteratorTest extends Specification {
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
 
 
-      val results = fs.getFeatures(q) // returns one simple feature
-      val sf = results.features().toList.head.asInstanceOf[SimpleFeature] //is this the time series??? im pretty sure it is
+      val results = fs.getFeatures(q)
+      val sf = results.features().toList.head.asInstanceOf[SimpleFeature]
       val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
 
       val total = timeSeries.map {
@@ -217,22 +211,30 @@ class TemporalDensityIteratorTest extends Specification {
       timeSeries.get(new DateTime("2012-01-01T01:00:00", DateTimeZone.UTC)).get should be equalTo 8L
     }
 
-    "nothing to query over" in {
+    "query dtg bounds not in DataStore" in {
       val ds = createDataStore(sft, 3)
+      val encodedFeatures = (0 until 48).toArray.map {
+        i => Array(i.toString, "1.0", new DateTime(s"2012-02-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
+      }
+      val fs = loadFeatures(ds, sft, encodedFeatures)
+
+      val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+
+      val results = fs.getFeatures(q)
+      val sfList = results.features().toList
+      sfList.length should be equalTo 0
+    }
+
+    "nothing to query over" in {
+      val ds = createDataStore(sft, 4)
       val encodedFeatures = new Array[Array[_]](0)
       val fs = loadFeatures(ds, sft, encodedFeatures)
 
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
 
-      val results = fs.getFeatures(q) // returns one simple feature
-      val sf = results.features().toList.head.asInstanceOf[SimpleFeature] //is this the time series??? im pretty sure it is
-      sf must not be null
-
-
-      val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
-      timeSeries.size should be equalTo 0
+      val results = fs.getFeatures(q)
+      val sfList = results.features().toList
+      sfList.length should be equalTo 0
     }
-
-    //more tests when we have the query hints working, these test will refine the getQuery calls
   }
 }

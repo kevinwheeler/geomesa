@@ -27,7 +27,7 @@ import org.apache.hadoop.io.Text
 import org.geotools.data.Query
 import org.geotools.filter.text.ecql.ECQL
 import org.joda.time.Interval
-import org.locationtech.geomesa.core.GEOMESA_ITERATORS_IS_DENSITY_TYPE
+import org.locationtech.geomesa.core.{GEOMESA_ITERATORS_IS_DENSITY_TYPE, GEOMESA_ITERATORS_IS_TEMPORAL_DENSITY_TYPE}
 import org.locationtech.geomesa.core.data.FeatureEncoding.FeatureEncoding
 import org.locationtech.geomesa.core.data._
 import org.locationtech.geomesa.core.filter._
@@ -154,7 +154,8 @@ class STIdxStrategy extends Strategy with Logging {
         configureIndexIterator(ofilter, query, schema, featureEncoding, featureType)
       case SpatioTemporalIterator =>
         val isDensity = query.getHints.containsKey(DENSITY_KEY)
-        configureSpatioTemporalIntersectingIterator(ofilter, featureType, schema, isDensity)
+        val isTemporalDensity = query.getHints.containsKey(TEMPORAL_DENSITY_KEY)
+        configureSpatioTemporalIntersectingIterator(ofilter, featureType, schema, isDensity, isTemporalDensity)
     }
   }
 
@@ -193,13 +194,15 @@ class STIdxStrategy extends Strategy with Logging {
   def configureSpatioTemporalIntersectingIterator(filter: Option[Filter],
                                                   featureType: SimpleFeatureType,
                                                   schema: String,
-                                                  isDensity: Boolean): IteratorSetting = {
+                                                  isDensity: Boolean,
+                                                  isTemporalDensity: Boolean): IteratorSetting = {
     val cfg = new IteratorSetting(iteratorPriority_SpatioTemporalIterator,
       "within-" + randomPrintableString(5),
       classOf[SpatioTemporalIntersectingIterator])
     SpatioTemporalIntersectingIterator.setOptions(cfg, schema, filter)
     configureFeatureType(cfg, featureType)
     if (isDensity) cfg.addOption(GEOMESA_ITERATORS_IS_DENSITY_TYPE, "isDensity")
+    if (isTemporalDensity) cfg.addOption(GEOMESA_ITERATORS_IS_TEMPORAL_DENSITY_TYPE, "isTemporalDensity")
     cfg
   }
 

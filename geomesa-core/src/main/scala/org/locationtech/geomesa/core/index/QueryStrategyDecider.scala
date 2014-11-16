@@ -43,6 +43,9 @@ object QueryStrategyDecider {
 
     if (isADensity) {
       // TODO GEOMESA-322 use other strategies with density iterator
+//      val geomDescriptor = sft.getGeometryDescriptor.toString
+//      val timeDesecriptor = getDtgDescriptor(sft).toString
+//      query.setPropertyNames(Array(geomDescriptor, timeDesecriptor))
       new STIdxStrategy
     } else {
       // check if we can use the attribute index first

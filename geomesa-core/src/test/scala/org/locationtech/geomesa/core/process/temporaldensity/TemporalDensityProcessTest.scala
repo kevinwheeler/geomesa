@@ -83,13 +83,15 @@ class TemporalDensityProcessTest extends Specification {
 
   "GeomesaTemporalDensity" should {
     "return stuffs" in {
-      val interval = new Interval(0, new DateTime().getMillis, DateTimeZone.UTC)
+      //val interval = new Interval(0, new DateTime().getMillis, DateTimeZone.UTC)
       //val q = getQuery(interval)
       //val features = fs.getFeatures(q)
       val features = fs.getFeatures()
 
+      import java.util.Date
+
       val geomesaTDP = new TemporalDensityProcess
-      val results = geomesaTDP.execute(features, interval, 4)
+      val results = geomesaTDP.execute(features, new Date(0), new Date(), 4)
       //results.size mustEqual 1
 
       val f = results.toArray()(0).asInstanceOf[SimpleFeature]

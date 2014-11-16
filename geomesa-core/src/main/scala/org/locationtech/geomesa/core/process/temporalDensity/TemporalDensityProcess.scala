@@ -1,10 +1,11 @@
 package org.locationtech.geomesa.core.process.temporalDensity
 
+import java.util.Date
+
 import com.typesafe.scalalogging.slf4j.Logging
 import org.geotools.data.Query
 import org.geotools.data.simple.{SimpleFeatureCollection, SimpleFeatureSource}
 import org.geotools.data.store.ReTypingFeatureCollection
-import org.geotools.factory.CommonFactoryFinder
 import org.geotools.feature.DefaultFeatureCollection
 import org.geotools.feature.visitor.{AbstractCalcResult, CalcResult, FeatureCalc}
 import org.geotools.process.factory.{DescribeParameter, DescribeProcess, DescribeResult}
@@ -13,7 +14,6 @@ import org.joda.time.Interval
 import org.locationtech.geomesa.core.index.QueryHints
 import org.opengis.feature.Feature
 import org.opengis.feature.simple.SimpleFeature
-import org.opengis.filter.Filter
 
 @DescribeProcess(
   title = "Temporal Density Query",
@@ -29,9 +29,13 @@ class TemporalDensityProcess extends Logging {
                features: SimpleFeatureCollection,
 
                @DescribeParameter(
-                 name = "interval",
-                 description = "The time interval over which we want result density information")
-               interval: Interval,
+                 name = "startDate",
+                 description = "The start of the time interval over which we want result density information")
+               startDate: Date,
+               @DescribeParameter(
+                 name = "endDate",
+                 description = "The end of the time interval over which we want result density information")
+               endDate: Date,
                @DescribeParameter(
                  name = "buckets",
                  min = 1,
@@ -44,6 +48,8 @@ class TemporalDensityProcess extends Logging {
     if(features.isInstanceOf[ReTypingFeatureCollection]) {
       logger.warn("WARNING: layer name in geoserver must match feature type name in geomesa")
     }
+
+   val interval = new Interval(startDate.getTime, endDate.getTime)
 
     val visitor = new TemporalDensityVisitor(features, interval, buckets)
     features.accepts(visitor, new NullProgressListener)

@@ -12,12 +12,15 @@ import org.geotools.process.factory.{DescribeParameter, DescribeProcess, Describ
 import org.geotools.util.NullProgressListener
 import org.joda.time.{DateTime, Interval}
 import org.locationtech.geomesa.core.index.QueryHints
+import org.locationtech.geomesa.core.iterators.TemporalDensityIterator
 import org.locationtech.geomesa.core.iterators.TemporalDensityIterator._
+import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
 import org.locationtech.geomesa.utils.geotools.Conversions._
 import org.opengis.feature.Feature
 import org.opengis.feature.simple.SimpleFeature
 
+import scala.util.Random
 import scala.util.parsing.json.JSONObject
 
 @DescribeProcess(
@@ -81,24 +84,30 @@ class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interv
   override def getResult: CalcResult = resultCalc
 
   def setValue(r: SimpleFeatureCollection) {
-    val TIME_SERIES_JSON: String = "timeseriesjson"
-    val TEMPORAL_DENSITY_FEATURE_STRING = s"$TIME_SERIES_JSON:String,geom:Geometry"
-    val projectedSFT = SimpleFeatureTypes.createType(this.getClass.getCanonicalName, TEMPORAL_DENSITY_FEATURE_STRING)
-    val retCollection = new DefaultFeatureCollection(null, projectedSFT)
     val sfList = r.features().toList
+//      val TIME_SERIES_JSON: String = "timeseriesjson"
+//      val TEMPORAL_DENSITY_FEATURE_STRING = s"$TIME_SERIES_JSON:String,geom:Geometry"
+      val projectedSFT = SimpleFeatureTypes.createType(this.getClass.getCanonicalName, TEMPORAL_DENSITY_FEATURE_STRING)
+      val retCollection = new DefaultFeatureCollection(null, projectedSFT)
     if (sfList.length == 0) {
       resultCalc = TDResult(retCollection)
     }
     else {
       val sf = sfList(0)
       val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
-      val s = timeSeries.toMap map {case (k,v) => (k.toString(null) -> v)}
+      val s = timeSeries.toMap map { case (k, v) => (k.toString(null) -> v)}
       val json = new JSONObject(s).toString()
-      sf.setAttribute("timeseries", json)
-      retCollection.add(sf)
+      val featureBuilder = AvroSimpleFeatureFactory.featureBuilder(projectedSFT)
+      featureBuilder.reset()
+      featureBuilder.add(json)
+      featureBuilder.add(TemporalDensityIterator.zeroPoint) //Filler value as Feature requires a geometry
+      val feature = featureBuilder.buildFeature(Random.nextString(6))
+      retCollection.add(feature)
       resultCalc = TDResult(retCollection)
     }
   }
+
+//  def setValue(r: SimpleFeatureCollection) = resultCalc = TDResult(r)
 
   def query(source: SimpleFeatureSource, query: Query) = {
     logger.info("Running Geomesa query on source type "+source.getClass.getName)

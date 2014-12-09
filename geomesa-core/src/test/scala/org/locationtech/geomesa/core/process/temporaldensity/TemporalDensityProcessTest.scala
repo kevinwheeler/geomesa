@@ -115,13 +115,13 @@ class TemporalDensityProcessTest extends Specification {
     q
   }
 
-  def getQuery2(query: String): Query = {
+  def getQueryJSON(query: String): Query = {
     val q = new Query(sftName, ECQL.toFilter(query))
     val geom = q.getFilter.accept(ExtractBoundsFilterVisitor.BOUNDS_VISITOR, null).asInstanceOf[Envelope]
     q
   }
 
-  "TemporalDensityIterator" should {
+  "TemporalDensityIteratorProcess" should {
     val spec = "id:java.lang.Integer,attr:java.lang.Double,dtg:Date,geom:Geometry:srid=4326"
     val sft = SimpleFeatureTypes.createType(sftName, spec)
     val builder = AvroSimpleFeatureFactory.featureBuilder(sft)
@@ -133,11 +133,11 @@ class TemporalDensityProcessTest extends Specification {
 
     val startTime = new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).toDate
     val endTime = new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).toDate
-    //val TDInterval =  new Interval(new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).getMillis, new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).getMillis)
     val TDNumBuckets = 24
     val fs = loadFeatures(ds, sft, encodedFeatures)
     //  the iterator compresses the results into bins.
     //  there are less than 150 bin because they are all in the same point in time
+
     "reduce total features returned" in {
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)") //time interval spans the whole datastore queried values
       //      val results = fs.getFeatures(q)
@@ -150,11 +150,21 @@ class TemporalDensityProcessTest extends Specification {
       iter.length should be equalTo 1 // one simpleFeature returned
     }
 
+    "reduce total features returned - json" in {
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)") //time interval spans the whole datastore queried values
+      //      val results = fs.getFeatures(q)
+      val geomesaTDP = new TemporalDensityProcess
+      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+      val allFeatures = results.features()
+      val iter = allFeatures.toList
+      (iter must not).beNull
+
+      iter.length should be equalTo 1 // one simpleFeature returned
+    }
+
     //  checks that all the buckets' weights returned add up to 150
-    "maintan total weights of time" in {
-
+    "maintain total weights of time" in {
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")//time interval spans the whole datastore queried values
-
       //      val results = fs.getFeatures(q)
       val geomesaTDP = new TemporalDensityProcess
       val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
@@ -167,8 +177,22 @@ class TemporalDensityProcessTest extends Specification {
 
       totalCount should be equalTo 150
       timeSeries.size should be equalTo 1
+    }
 
+    "maintain total weights of time - json" in {
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")//time interval spans the whole datastore queried values
+      //      val results = fs.getFeatures(q)
+      val geomesaTDP = new TemporalDensityProcess
+      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+      val iter = results.features().toList
+      val sf = iter.head.asInstanceOf[SimpleFeature]
+      iter must not beNull
 
+      val timeSeries = jsonToTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+      val totalCount = timeSeries.map { case (dateTime, count) => count}.sum
+
+      totalCount should be equalTo 150
+      timeSeries.size should be equalTo 1
     }
 
     // The points varied but that should have no effect on the bucketing of the timeseries
@@ -196,17 +220,39 @@ class TemporalDensityProcessTest extends Specification {
       timeSeries.size should be equalTo 1
     }
 
+    "maintain weight irrespective of point - json" in {
+      val ds = createDataStore(sft, 2)
+      val encodedFeatures = (0 until 150).toArray.map {
+        i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, s"POINT(-77.$i 38.$i)")
+      }
+      val fs = loadFeatures(ds, sft, encodedFeatures)
+
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")//time interval spans the whole datastore queried values
+
+      //      val results = fs.getFeatures(q)
+      val geomesaTDP = new TemporalDensityProcess
+      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+      val sfList = results.features().toList
+
+      val sf = sfList.head.asInstanceOf[SimpleFeature]
+      val timeSeries = jsonToTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+
+      val total = timeSeries.map { case (dateTime, count) => count}.sum
+
+      total should be equalTo 150
+      timeSeries.size should be equalTo 1
+    }
+
     //this test actually varies the time therefore they should be split into seperate buckets
     //checks that there are 24 buckets, and that all the counts across the buckets sum to 150
     "correctly bin off of time intervals" in {
-      val ds = createDataStore(sft, 2)
+      val ds = createDataStore(sft, 3)
       val encodedFeatures = (0 until 48).toArray.map {
         i => Array(i.toString, "1.0", new DateTime(s"2012-01-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
       }
       val fs = loadFeatures(ds, sft, encodedFeatures)
 
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
-
 
       //      val results = fs.getFeatures(q) // returns one simple feature
       val geomesaTDP = new TemporalDensityProcess
@@ -223,14 +269,14 @@ class TemporalDensityProcessTest extends Specification {
       timeSeries.size should be equalTo 24
     }
 
-    "correctly bin off of time intervals2" in {
-      val ds = createDataStore(sft, 200)
+    "correctly bin off of time intervals - json" in {
+      val ds = createDataStore(sft, 4)
       val encodedFeatures = (0 until 48).toArray.map {
         i => Array(i.toString, "1.0", new DateTime(s"2012-01-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
       }
       val fs = loadFeatures(ds, sft, encodedFeatures)
 
-      val q = getQuery2("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
       //      val results = fs.getFeatures(q) // returns one simple feature
       val geomesaTDP = new TemporalDensityProcess
       val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
@@ -247,7 +293,7 @@ class TemporalDensityProcessTest extends Specification {
     }
 
     "query dtg bounds not in DataStore" in {
-      val ds = createDataStore(sft, 3)
+      val ds = createDataStore(sft, 5)
       val encodedFeatures = (0 until 48).toArray.map {
         i => Array(i.toString, "1.0", new DateTime(s"2012-02-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
       }
@@ -261,12 +307,40 @@ class TemporalDensityProcessTest extends Specification {
       sfList.length should be equalTo 0
     }
 
+    "query dtg bounds not in DataStore - json" in {
+      val ds = createDataStore(sft, 6)
+      val encodedFeatures = (0 until 48).toArray.map {
+        i => Array(i.toString, "1.0", new DateTime(s"2012-02-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
+      }
+      val fs = loadFeatures(ds, sft, encodedFeatures)
+
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+
+      val geomesaTDP = new TemporalDensityProcess
+      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+      val sfList = results.features().toList
+      sfList.length should be equalTo 0
+    }
+
     "nothing to query over" in {
-      val ds = createDataStore(sft, 4)
+      val ds = createDataStore(sft, 7)
       val encodedFeatures = new Array[Array[_]](0)
       val fs = loadFeatures(ds, sft, encodedFeatures)
 
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+
+      val geomesaTDP = new TemporalDensityProcess
+      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+      val sfList = results.features().toList
+      sfList.length should be equalTo 0
+    }
+
+    "nothing to query over - json" in {
+      val ds = createDataStore(sft, 8)
+      val encodedFeatures = new Array[Array[_]](0)
+      val fs = loadFeatures(ds, sft, encodedFeatures)
+
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
 
       val geomesaTDP = new TemporalDensityProcess
       val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)

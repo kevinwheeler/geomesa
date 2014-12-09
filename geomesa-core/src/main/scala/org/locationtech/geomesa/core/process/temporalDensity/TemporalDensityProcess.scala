@@ -39,11 +39,11 @@ class TemporalDensityProcess extends Logging {
                @DescribeParameter(
                  name = "startDate",
                  description = "The start of the time interval over which we want result density information")
-               startDate: Date,
+               startDate: DateTime,
                @DescribeParameter(
                  name = "endDate",
                  description = "The end of the time interval over which we want result density information")
-               endDate: Date,
+               endDate: DateTime,
                @DescribeParameter(
                  name = "buckets",
                  min = 1,
@@ -57,7 +57,7 @@ class TemporalDensityProcess extends Logging {
       logger.warn("WARNING: layer name in geoserver must match feature type name in geomesa")
     }
 
-   val interval = new Interval(startDate.getTime, endDate.getTime)
+   val interval = new Interval(startDate, endDate)
 
     val visitor = new TemporalDensityVisitor(features, interval, buckets)
     features.accepts(visitor, new NullProgressListener)

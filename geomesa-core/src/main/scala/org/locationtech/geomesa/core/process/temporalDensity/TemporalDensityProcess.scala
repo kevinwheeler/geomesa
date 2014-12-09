@@ -83,30 +83,6 @@ class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interv
 
   override def getResult: CalcResult = resultCalc
 
- // def setValue(r: SimpleFeatureCollection) {
- //   val sfList = r.features().toList
-////      val TIME_SERIES_JSON: String = "timeseriesjson"
-////      val TEMPORAL_DENSITY_FEATURE_STRING = s"$TIME_SERIES_JSON:String,geom:Geometry"
- //     val projectedSFT = SimpleFeatureTypes.createType(this.getClass.getCanonicalName, TEMPORAL_DENSITY_FEATURE_STRING)
- //     val retCollection = new DefaultFeatureCollection(null, projectedSFT)
- //   if (sfList.length == 0) {
- //     resultCalc = TDResult(retCollection)
- //   }
- //   else {
- //     val sf = sfList(0)
- //     val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
- //     val s = timeSeries.toMap map { case (k, v) => (k.toString(null) -> v)}
- //     val json = new JSONObject(s).toString()
- //     val featureBuilder = AvroSimpleFeatureFactory.featureBuilder(projectedSFT)
- //     featureBuilder.reset()
- //     featureBuilder.add(json)
- //     featureBuilder.add(TemporalDensityIterator.zeroPoint) //Filler value as Feature requires a geometry
- //     val feature = featureBuilder.buildFeature(Random.nextString(6))
- //     retCollection.add(feature)
- //     resultCalc = TDResult(retCollection)
- //   }
- // }
-
   def setValue(r: SimpleFeatureCollection) = resultCalc = TDResult(r)
 
   def query(source: SimpleFeatureSource, query: Query) = {

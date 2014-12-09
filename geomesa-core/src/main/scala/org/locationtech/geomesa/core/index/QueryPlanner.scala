@@ -189,17 +189,20 @@ case class QueryPlanner(schema: String,
       }
     } else if (query.getHints.containsKey(TEMPORAL_DENSITY_KEY)) {
       val timeSeriesStrings = accumuloIterator.map { kv =>
-        decoder.decode(kv.getValue).getAttribute(ENCODED_TIME_SERIES).toString
+        decoder.decode(kv.getValue).getAttribute(TIME_SERIES).toString
       }
 
       val summedTimeSeries = timeSeriesStrings.map(decodeTimeSeries).reduce(combineTimeSeries)
-      val s = summedTimeSeries.toMap map { case (k, v) => (k.toString(null) -> v)}
-      val timeSeriesJSON = new JSONObject(s).toString()
 
       val featureBuilder = AvroSimpleFeatureFactory.featureBuilder(returnSFT)
       featureBuilder.reset()
-      //featureBuilder.add(TemporalDensityIterator.encodeTimeSeries(summedTimeSeries))
-      featureBuilder.add(timeSeriesJSON)
+      if (query.getHints.containsKey(RETURN_ENCODED))
+        featureBuilder.add(TemporalDensityIterator.encodeTimeSeries(summedTimeSeries))
+      else {
+        val jsonMap = summedTimeSeries.toMap map { case (k, v) => (k.toString(null) -> v)}
+        val timeSeriesJSON = new JSONObject(jsonMap).toString()
+        featureBuilder.add(timeSeriesJSON)
+      }
       featureBuilder.add(QueryPlanner.zeroPoint) //Filler value as Feature requires a geometry
       val result = featureBuilder.buildFeature(null)
 

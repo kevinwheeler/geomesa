@@ -1,163 +1,285 @@
-package org.locationtech.geomesa.core.process.temporaldensity
-
-import com.vividsolutions.jts.geom.{Envelope, Geometry}
-import org.geotools.data.{Query, DataStoreFinder}
-import org.geotools.factory.Hints
-import org.geotools.feature.DefaultFeatureCollection
-import org.geotools.filter.text.cql2.CQL
-import org.geotools.filter.text.ecql.ECQL
-import org.geotools.filter.visitor.ExtractBoundsFilterVisitor
-import org.geotools.geometry.jts.ReferencedEnvelope
-import org.geotools.referencing.crs.DefaultGeographicCRS
-import org.joda.time.format.DateTimeFormatter
-import org.joda.time.format.ISODateTimeFormat
-import org.joda.time.{Interval, DateTime, DateTimeZone}
-import org.junit.runner.RunWith
-import org.locationtech.geomesa.core.data.{SimpleFeatureDecoder, AccumuloDataStore, AccumuloFeatureStore}
-import org.locationtech.geomesa.core.index.{QueryHints, Constants}
-import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.{decodeTimeSeries, ENCODED_TIME_SERIES}
-import org.locationtech.geomesa.core.process.temporalDensity.TemporalDensityProcess
-import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
-import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
-import org.locationtech.geomesa.utils.text.WKTUtils
-import org.opengis.feature.simple.SimpleFeature
-import org.specs2.mutable.Specification
-import org.specs2.runner.JUnitRunner
-
-import scala.collection.JavaConversions._
-
-@RunWith(classOf[JUnitRunner])
-class TemporalDensityProcessTest extends Specification {
-
-  sequential
-
-  val dtgField = org.locationtech.geomesa.core.process.tube.DEFAULT_DTG_FIELD
-  val geotimeAttributes = s"*geom:Geometry:srid=4326,$dtgField:Date"
-
-  def createStore: AccumuloDataStore =
-  // the specific parameter values should not matter, as we
-  // are requesting a mock data store connection to Accumulo
-    DataStoreFinder.getDataStore(Map(
-      "instanceId"        -> "mycloud",
-      "zookeepers"        -> "zoo1:2181,zoo2:2181,zoo3:2181",
-      "user"              -> "myuser",
-      "password"          -> "mypassword",
-      "auths"             -> "A,B,C",
-      "tableName"         -> "testwrite",
-      "useMock"           -> "true",
-      "featureEncoding"   -> "avro")).asInstanceOf[AccumuloDataStore]
-
-  val sftName = "geomesaTemporalDensityTestType"
-  val sft = SimpleFeatureTypes.createType(sftName, s"type:String,$geotimeAttributes")
-  sft.getUserData()(Constants.SF_PROPERTY_START_TIME) = dtgField
-
-  val ds = createStore
-
-  ds.createSchema(sft)
-  val fs = ds.getFeatureSource(sftName).asInstanceOf[AccumuloFeatureStore]
-
-  val featureCollection = new DefaultFeatureCollection(sftName, sft)
-
-  List("a", "b").foreach { name =>
-    List(1, 2, 3, 4).zip(List(45, 46, 47, 48)).foreach { case (i, lat) =>
-      val sf = AvroSimpleFeatureFactory.buildAvroFeature(sft, List(), name + i.toString)
-      sf.setDefaultGeometry(WKTUtils.read(f"POINT($lat%d $lat%d)"))
-      sf.setAttribute(org.locationtech.geomesa.core.process.tube.DEFAULT_DTG_FIELD, new DateTime("2011-01-01T00:00:55Z", DateTimeZone.UTC).toDate)
-      sf.setAttribute("type", name)
-      sf.getUserData()(Hints.USE_PROVIDED_FID) = java.lang.Boolean.TRUE
-      featureCollection.add(sf)
-    }
-  }
-
-  // write the feature to the storeq
-  val res = fs.addFeatures(featureCollection)
-
-  def getQuery(interval: Interval): Query = {
-    val dtf: DateTimeFormatter = ISODateTimeFormat.dateTime.withZone(DateTimeZone.UTC)
-    val startTime = dtf.print(interval.getStartMillis)
-    val endTime = dtf.print(interval.getStartMillis)
-    val queryString = s"(dtg between '$startTime' AND '$endTime')"
-    val q = new Query("test", ECQL.toFilter(queryString))
-    q
-  }
-
-  "GeomesaTemporalDensity" should {
-    "return stuffs" in {
-      //val interval = new Interval(0, new DateTime().getMillis, DateTimeZone.UTC)
-      //val q = getQuery(interval)
-      //val features = fs.getFeatures(q)
-      val features = fs.getFeatures()
-
-      import java.util.Date
-
-      val geomesaTDP = new TemporalDensityProcess
-      val results = geomesaTDP.execute(features, new Date(0), new Date(), 4)
-      //results.size mustEqual 1
-
-      val f = results.toArray()(0).asInstanceOf[SimpleFeature]
-      val timeSeries = decodeTimeSeries(f.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
-
-      for ((key,value) <- timeSeries){
-        println("key: " + key + " value: " + value)
-      }
-      results.size mustEqual 1
+///*
+// * Copyright 2013 Commonwealth Computer Research, Inc.
+// *
+// * Licensed under the Apache License, Version 2.0 (the License);
+// * you may not use this file except in compliance with the License.
+// * You may obtain a copy of the License at
+// *
+// * http://www.apache.org/licenses/LICENSE-2.0
+// *
+// * Unless required by applicable law or agreed to in writing, software
+// * distributed under the License is distributed on an AS IS BASIS,
+// * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// * See the License for the specific language governing permissions and
+// * limitations under the License.
+// */
 //
 //
-//      while (f.hasNext) {
-//        val sf = f.next
-//        sf.getAttribute("type") should beOneOf("a", "b")
-//      }
-
-
-    }
+//package org.locationtech.geomesa.core.process.temporaldensity
 //
-//    "respect a parent filter" in {
-//      val features = fs.getFeatures(CQL.toFilter("type = 'b'"))
+//import java.util.Date
 //
-//      val geomesaQuery = new QueryProcess
-//      val results = geomesaQuery.execute(features, null)
+//import org.apache.accumulo.core.client.BatchWriterConfig
+//import org.apache.accumulo.core.client.admin.TimeType
+//import org.apache.accumulo.core.client._
+//import org.apache.accumulo.core.data._
+//import org.apache.accumulo.core.security.Authorizations
+//import com.google.common.collect.HashBasedTable
+//import com.vividsolutions.jts.geom.{Envelope, Point}
+//import org.apache.accumulo.core.client.mock.MockInstance
+//import org.apache.accumulo.core.client.security.tokens.PasswordToken
+//import org.apache.hadoop.io.Text
+//import org.geotools.data.simple.SimpleFeatureStore
+//import org.geotools.data.{DataStore, DataUtilities, Query}
+//import org.geotools.factory.Hints
+//import org.geotools.filter.text.ecql.ECQL
+//import org.geotools.filter.visitor.ExtractBoundsFilterVisitor
+//import org.geotools.geometry.jts.ReferencedEnvelope
+//import org.geotools.referencing.crs.DefaultGeographicCRS
+//import org.joda.time.{DateTime, DateTimeZone}
+//import org.junit.runner.RunWith
+//import org.locationtech.geomesa.core._
+//import org.locationtech.geomesa.core.data._
+//import org.locationtech.geomesa.core.index.{Constants, QueryHints}
+//import org.locationtech.geomesa.core.iterators.TemporalDensityIterator
+//import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.{decodeTimeSeries, TIME_SERIES, jsonToTimeSeries}
+//import org.locationtech.geomesa.core.process.temporalDensity.TemporalDensityProcess
+//import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
+//import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
+//import org.opengis.feature.simple.SimpleFeatureType
+//import org.opengis.feature.simple.SimpleFeature
+//import org.specs2.mutable.Specification
+//import org.specs2.runner.JUnitRunner
 //
-//      val f = results.features()
-//      while (f.hasNext) {
-//        val sf = f.next
-//        sf.getAttribute("type") mustEqual "b"
-//      }
+//import scala.collection.JavaConversions._
+//import scala.util.Random
 //
-//      results.size mustEqual 4
+//import org.joda.time.{DateTime, DateTimeZone, Interval, Duration}
+//
+//
+//@RunWith(classOf[JUnitRunner])
+//class TemporalDensityProcessTest extends Specification {
+//
+//  sequential
+//
+//  import org.locationtech.geomesa.utils.geotools.Conversions._
+//
+//  private val tableName = "tableTestTDIP"
+//  private val sftName = "sftTestTDIP"
+//
+//  def createDataStore(sft: SimpleFeatureType, i: Int = 0): DataStore = {
+//    val mockInstance = new MockInstance("dummy" + i)
+//    val c = mockInstance.getConnector("user", new PasswordToken("pass".getBytes))
+//    c.tableOperations.create(tableName)
+//    val splits = (0 to 99).map {
+//      s => "%02d".format(s)
+//    }.map(new Text(_))
+//    c.tableOperations().addSplits(tableName, new java.util.TreeSet[Text](splits))
+//
+//    val dsf = new AccumuloDataStoreFactory
+//
+//    import org.locationtech.geomesa.core.data.AccumuloDataStoreFactory.params._
+//
+//    val ds = dsf.createDataStore(Map(
+//      zookeepersParam.key -> "dummy",
+//      instanceIdParam.key -> f"dummy$i%d",
+//      userParam.key       -> "user",
+//      passwordParam.key   -> "pass",
+//      tableNameParam.key  -> tableName,
+//      mockParam.key       -> "true"))
+//    ds.createSchema(sft)
+//    ds
+//  }
+//
+//  def loadFeatures(ds: DataStore, sft: SimpleFeatureType, encodedFeatures: Array[_ <: Array[_]]): SimpleFeatureStore = {
+//    val builder = AvroSimpleFeatureFactory.featureBuilder(sft)
+//    val features = encodedFeatures.map {
+//      e =>
+//        val f = builder.buildFeature(e(0).toString, e.asInstanceOf[Array[AnyRef]])
+//        f.getUserData.put(Hints.USE_PROVIDED_FID, java.lang.Boolean.TRUE)
+//        f.getUserData.put(Hints.PROVIDED_FID, e(0).toString)
+//        f
 //    }
 //
-//    "be able to use its own filter" in {
-//      val features = fs.getFeatures(CQL.toFilter("type = 'b' OR type = 'a'"))
+//    val fs = ds.getFeatureSource(sftName).asInstanceOf[SimpleFeatureStore]
+//    fs.addFeatures(DataUtilities.collection(features))
+//    fs.getTransaction.commit()
+//    fs
+//  }
 //
-//      val geomesaQuery = new QueryProcess
-//      val results = geomesaQuery.execute(features, CQL.toFilter("type = 'a'"))
 //
-//      val f = results.features()
-//      while (f.hasNext) {
-//        val sf = f.next
-//        sf.getAttribute("type") mustEqual "a"
-//      }
+//  def getQuery(query: String): Query = {
+//    val q = new Query(sftName, ECQL.toFilter(query))
+//    val geom = q.getFilter.accept(ExtractBoundsFilterVisitor.BOUNDS_VISITOR, null).asInstanceOf[Envelope]
+//    //    q.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
+//    //    q.getHints.put(QueryHints.TIME_INTERVAL_KEY, new Interval(new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).getMillis, new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).getMillis))
+//    //    q.getHints.put(QueryHints.TIME_BUCKETS_KEY, 24)
+//    q.getHints.put(QueryHints.RETURN_ENCODED, java.lang.Boolean.TRUE)
+//    q
+//  }
 //
-//      results.size mustEqual 4
+//  def getQuery2(query: String): Query = {
+//    val q = new Query(sftName, ECQL.toFilter(query))
+//    val geom = q.getFilter.accept(ExtractBoundsFilterVisitor.BOUNDS_VISITOR, null).asInstanceOf[Envelope]
+//    //    q.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
+//    //    q.getHints.put(QueryHints.TIME_INTERVAL_KEY, new Interval(new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).getMillis, new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).getMillis))
+//    //    q.getHints.put(QueryHints.TIME_BUCKETS_KEY, 24)
+//    q
+//  }
+//
+//  "TemporalDensityIterator" should {
+//    val spec = "id:java.lang.Integer,attr:java.lang.Double,dtg:Date,geom:Geometry:srid=4326"
+//    val sft = SimpleFeatureTypes.createType(sftName, spec)
+//    val builder = AvroSimpleFeatureFactory.featureBuilder(sft)
+//    sft.getUserData.put(Constants.SF_PROPERTY_START_TIME, "dtg")
+//    val ds = createDataStore(sft,0)
+//    val encodedFeatures = (0 until 150).toArray.map{
+//      i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
 //    }
 //
-//    "properly query geometry" in {
-//      val features = fs.getFeatures()
+//    val startTime = new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC)
+//    val endTime = new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC)
+//    //val TDInterval =  new Interval(new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).getMillis, new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).getMillis)
+//    val TDNumBuckets = 24
+//    val fs = loadFeatures(ds, sft, encodedFeatures)
+//    //  the iterator compresses the results into bins.
+//    //  there are less than 150 bin because they are all in the same point in time
+//    "reduce total features returned" in {
+//      val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)") //time interval spans the whole datastore queried values
+//      //      val results = fs.getFeatures(q)
+//      val geomesaTDP = new TemporalDensityProcess
+//      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+//      val allFeatures = results.features()
+//      val iter = allFeatures.toList
+//      (iter must not).beNull
 //
-//      val geomesaQuery = new QueryProcess
-//      val results = geomesaQuery.execute(features, CQL.toFilter("bbox(geom, 45.0, 45.0, 46.0, 46.0)"))
-//
-//      var poly = WKTUtils.read("POLYGON((45 45, 46 45, 46 46, 45 46, 45 45))")
-//
-//      val f = results.features()
-//      while (f.hasNext) {
-//        val sf = f.next
-//        poly.intersects(sf.getDefaultGeometry.asInstanceOf[Geometry]) must beTrue
-//      }
-//
-//      results.size mustEqual 4
+//      iter.length should be equalTo 1 // one simpleFeature returned
 //    }
-  }
-
-
-}
+//
+//    //  checks that all the buckets' weights returned add up to 150
+//    "maintan total weights of time" in {
+//
+//      val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")//time interval spans the whole datastore queried values
+//
+//      //      val results = fs.getFeatures(q)
+//      val geomesaTDP = new TemporalDensityProcess
+//      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+//      val iter = results.features().toList
+//      val sf = iter.head.asInstanceOf[SimpleFeature]
+//      iter must not beNull
+//
+//      val timeSeries = decodeTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+//      val totalCount = timeSeries.map { case (dateTime, count) => count}.sum
+//
+//      totalCount should be equalTo 150
+//      timeSeries.size should be equalTo 1
+//
+//
+//    }
+//
+//    // The points varied but that should have no effect on the bucketing of the timeseries
+//    //  Checks that all the buckets weight sum to 150, the original number of rows
+//    "maintain weight irrespective of point" in {
+//      val ds = createDataStore(sft, 1)
+//      val encodedFeatures = (0 until 150).toArray.map {
+//        i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, s"POINT(-77.$i 38.$i)")
+//      }
+//      val fs = loadFeatures(ds, sft, encodedFeatures)
+//
+//      val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")//time interval spans the whole datastore queried values
+//
+//      //      val results = fs.getFeatures(q)
+//      val geomesaTDP = new TemporalDensityProcess
+//      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+//      val sfList = results.features().toList
+//
+//      val sf = sfList.head.asInstanceOf[SimpleFeature]
+//      val timeSeries = decodeTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+//
+//      val total = timeSeries.map { case (dateTime, count) => count}.sum
+//
+//      total should be equalTo 150
+//      timeSeries.size should be equalTo 1
+//    }
+//
+//    //this test actually varies the time therefore they should be split into seperate buckets
+//    //checks that there are 24 buckets, and that all the counts across the buckets sum to 150
+//    "correctly bin off of time intervals" in {
+//      val ds = createDataStore(sft, 2)
+//      val encodedFeatures = (0 until 48).toArray.map {
+//        i => Array(i.toString, "1.0", new DateTime(s"2012-01-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
+//      }
+//      val fs = loadFeatures(ds, sft, encodedFeatures)
+//
+//      val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+//
+//
+//      //      val results = fs.getFeatures(q) // returns one simple feature
+//      val geomesaTDP = new TemporalDensityProcess
+//      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+//      val sf = results.features().toList.head.asInstanceOf[SimpleFeature] //is this the time series??? im pretty sure it is
+//      val timeSeries = decodeTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+//
+//      val total = timeSeries.map {
+//        case (dateTime, count) =>
+//          count should be equalTo 2L
+//          count}.sum
+//
+//      total should be equalTo 48
+//      timeSeries.size should be equalTo 24
+//    }
+//
+//    "correctly bin off of time intervals2" in {
+//      val ds = createDataStore(sft, 2)
+//      val encodedFeatures = (0 until 48).toArray.map {
+//        i => Array(i.toString, "1.0", new DateTime(s"2012-01-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
+//      }
+//      val fs = loadFeatures(ds, sft, encodedFeatures)
+//
+//      val q = getQuery2("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+//
+//
+//      //      val results = fs.getFeatures(q) // returns one simple feature
+//      val geomesaTDP = new TemporalDensityProcess
+//      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+//      val sf = results.features().toList.head.asInstanceOf[SimpleFeature] //is this the time series??? im pretty sure it is
+//      val timeSeries = jsonToTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+//
+//      val total = timeSeries.map {
+//        case (dateTime, count) =>
+//          count should be equalTo 2L
+//          count}.sum
+//
+//      total should be equalTo 48
+//      timeSeries.size should be equalTo 24
+//    }
+//
+//    "query dtg bounds not in DataStore" in {
+//      val ds = createDataStore(sft, 3)
+//      val encodedFeatures = (0 until 48).toArray.map {
+//        i => Array(i.toString, "1.0", new DateTime(s"2012-02-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
+//      }
+//      val fs = loadFeatures(ds, sft, encodedFeatures)
+//
+//      val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+//
+//      val geomesaTDP = new TemporalDensityProcess
+//      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+//      val sfList = results.features().toList
+//      sfList.length should be equalTo 0
+//    }
+//
+//    "nothing to query over" in {
+//      val ds = createDataStore(sft, 4)
+//      val encodedFeatures = new Array[Array[_]](0)
+//      val fs = loadFeatures(ds, sft, encodedFeatures)
+//
+//      val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")///ake the time interval 1 day and the number of buckets 24
+//
+//      val geomesaTDP = new TemporalDensityProcess
+//      val results = geomesaTDP.execute(fs.getFeatures(q), startTime, endTime, TDNumBuckets)
+//      val sfList = results.features().toList
+//      sfList.length should be equalTo 0
+//    }
+//  }
+//}

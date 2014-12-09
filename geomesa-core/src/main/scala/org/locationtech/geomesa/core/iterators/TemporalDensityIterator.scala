@@ -38,9 +38,9 @@ import org.locationtech.geomesa.utils.geotools.{SimpleFeatureTypes, TimeSnap}
 import org.opengis.feature.simple.SimpleFeatureType
 
 import scala.util.Random
+import scala.util.parsing.json.{JSON, JSONObject}
 
 class TemporalDensityIterator(other: TemporalDensityIterator, env: IteratorEnvironment) extends SortedKeyValueIterator[Key, Value] {
-
   import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.{TEMPORAL_DENSITY_FEATURE_STRING, TimeSeries}
 
   var curRange: ARange = null
@@ -156,8 +156,8 @@ object TemporalDensityIterator extends Logging {
 
   val INTERVAL_KEY = "geomesa.temporal.density.bounds"
   val BUCKETS_KEY = "geomesa.temporal.density.buckets"
-  val ENCODED_TIME_SERIES: String = "timeseries"
-  val TEMPORAL_DENSITY_FEATURE_STRING = s"$ENCODED_TIME_SERIES:String,geom:Geometry"
+  val TIME_SERIES: String = "timeseries"
+  val TEMPORAL_DENSITY_FEATURE_STRING = s"$TIME_SERIES:String,geom:Geometry"
 
   val zeroPoint = new GeometryFactory().createPoint(new Coordinate(0,0))
 
@@ -193,6 +193,23 @@ object TemporalDensityIterator extends Logging {
       resultTS.put(key, ts1.getOrElse(key, 0L) + ts2.getOrElse(key,0L))
     }
     resultTS
+  }
+
+  def timeSeriesToJSON(ts : TimeSeries) : String = {
+    val jsonMap = ts.toMap map { case (k, v) => (k.toString(null) -> v)}
+    val timeSeriesJSON = new JSONObject(jsonMap).toString()
+    timeSeriesJSON
+  }
+
+  def jsonToTimeSeries(ts : String) : TimeSeries = {
+    val jsonMap = JSON.parseFull(ts).asInstanceOf[Option[Map[String, String]]].get
+    val timeSeries = new collection.mutable.HashMap[DateTime, Long]()
+    for ((k,v) <- jsonMap){
+      val date = new DateTime(k)
+      val count = v.toLong
+      timeSeries.put(date, count)
+    }
+    return timeSeries
   }
 
   def encodeTimeSeries(timeSeries: TimeSeries): String = {

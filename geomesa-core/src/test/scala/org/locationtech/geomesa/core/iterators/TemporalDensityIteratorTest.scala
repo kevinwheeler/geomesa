@@ -29,7 +29,7 @@ import org.joda.time.{DateTime, DateTimeZone, Interval}
 import org.junit.runner.RunWith
 import org.locationtech.geomesa.core.data._
 import org.locationtech.geomesa.core.index.{Constants, QueryHints}
-import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.{ENCODED_TIME_SERIES, decodeTimeSeries}
+import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.{TIME_SERIES, decodeTimeSeries}
 import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
@@ -94,6 +94,16 @@ class TemporalDensityIteratorTest extends Specification {
     q.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
     q.getHints.put(QueryHints.TIME_INTERVAL_KEY, new Interval(new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).getMillis, new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).getMillis))
     q.getHints.put(QueryHints.TIME_BUCKETS_KEY, 24)
+    q.getHints.put(QueryHints.RETURN_ENCODED, java.lang.Boolean.TRUE)
+    q
+  }
+
+  def getQuery2(query: String): Query = {
+    val q = new Query("test", ECQL.toFilter(query))
+    val geom = q.getFilter.accept(ExtractBoundsFilterVisitor.BOUNDS_VISITOR, null).asInstanceOf[Envelope]
+    q.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
+    q.getHints.put(QueryHints.TIME_INTERVAL_KEY, new Interval(new DateTime("2012-01-01T0:00:00", DateTimeZone.UTC).getMillis, new DateTime("2012-01-02T0:00:00", DateTimeZone.UTC).getMillis))
+    q.getHints.put(QueryHints.TIME_BUCKETS_KEY, 24)
     q
   }
 
@@ -102,7 +112,6 @@ class TemporalDensityIteratorTest extends Specification {
     val sft = SimpleFeatureTypes.createType("test", spec)
     val builder = AvroSimpleFeatureFactory.featureBuilder(sft)
     sft.getUserData.put(Constants.SF_PROPERTY_START_TIME, "dtg")
-
     val ds = createDataStore(sft,0)
     val encodedFeatures = (0 until 150).toArray.map{
       i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
@@ -129,12 +138,13 @@ class TemporalDensityIteratorTest extends Specification {
       val sf = iter.head.asInstanceOf[SimpleFeature]
       iter must not beNull
 
-      val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
+      val timeSeries = decodeTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
       val totalCount = timeSeries.map { case (dateTime, count) => count}.sum
 
       totalCount should be equalTo 150
       timeSeries.size should be equalTo 1
     }
+
 
     "maintain total irrespective of point" in {
       val ds = createDataStore(sft, 1)
@@ -149,7 +159,7 @@ class TemporalDensityIteratorTest extends Specification {
       val sfList = results.features().toList
 
       val sf = sfList.head.asInstanceOf[SimpleFeature]
-      val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
+      val timeSeries = decodeTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
 
       val total = timeSeries.map { case (dateTime, count) => count}.sum
 
@@ -169,7 +179,7 @@ class TemporalDensityIteratorTest extends Specification {
 
       val results = fs.getFeatures(q)
       val sf = results.features().toList.head.asInstanceOf[SimpleFeature]
-      val timeSeries = decodeTimeSeries(sf.getAttribute(ENCODED_TIME_SERIES).asInstanceOf[String])
+      val timeSeries = decodeTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
 
       val total = timeSeries.map {
         case (dateTime, count) =>

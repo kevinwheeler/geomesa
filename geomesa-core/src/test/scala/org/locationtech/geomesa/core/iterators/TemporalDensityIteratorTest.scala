@@ -29,7 +29,7 @@ import org.joda.time.{DateTime, DateTimeZone, Interval}
 import org.junit.runner.RunWith
 import org.locationtech.geomesa.core.data._
 import org.locationtech.geomesa.core.index.{Constants, QueryHints}
-import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.{TIME_SERIES, decodeTimeSeries}
+import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.{TIME_SERIES, decodeTimeSeries, jsonToTimeSeries}
 import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
@@ -98,7 +98,7 @@ class TemporalDensityIteratorTest extends Specification {
     q
   }
 
-  def getQuery2(query: String): Query = {
+  def getQueryJSON(query: String): Query = {
     val q = new Query("test", ECQL.toFilter(query))
     val geom = q.getFilter.accept(ExtractBoundsFilterVisitor.BOUNDS_VISITOR, null).asInstanceOf[Envelope]
     q.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
@@ -145,6 +145,22 @@ class TemporalDensityIteratorTest extends Specification {
       timeSeries.size should be equalTo 1
     }
 
+    "maintain total weights of time - json" in {
+
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")
+
+      val results = fs.getFeatures(q)
+      val iter = results.features().toList
+      val sf = iter.head.asInstanceOf[SimpleFeature]
+      iter must not beNull
+
+      val timeSeries = jsonToTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+      val totalCount = timeSeries.map { case (dateTime, count) => count}.sum
+
+      totalCount should be equalTo 150
+      timeSeries.size should be equalTo 1
+    }
+
 
     "maintain total irrespective of point" in {
       val ds = createDataStore(sft, 1)
@@ -167,8 +183,29 @@ class TemporalDensityIteratorTest extends Specification {
       timeSeries.size should be equalTo 1
     }
 
-    "correctly bin off of time intervals" in {
+    "maintain total irrespective of point - json" in {
       val ds = createDataStore(sft, 2)
+      val encodedFeatures = (0 until 150).toArray.map {
+        i => Array(i.toString, "1.0", new DateTime("2012-01-01T19:00:00", DateTimeZone.UTC).toDate, s"POINT(-77.$i 38.$i)")
+      }
+      val fs = loadFeatures(ds, sft, encodedFeatures)
+
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")
+
+      val results = fs.getFeatures(q)
+      val sfList = results.features().toList
+
+      val sf = sfList.head.asInstanceOf[SimpleFeature]
+      val timeSeries = jsonToTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+
+      val total = timeSeries.map { case (dateTime, count) => count}.sum
+
+      total should be equalTo 150
+      timeSeries.size should be equalTo 1
+    }
+
+    "correctly bin off of time intervals" in {
+      val ds = createDataStore(sft, 3)
       val encodedFeatures = (0 until 48).toArray.map {
         i => Array(i.toString, "1.0", new DateTime(s"2012-01-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
       }
@@ -180,6 +217,29 @@ class TemporalDensityIteratorTest extends Specification {
       val results = fs.getFeatures(q)
       val sf = results.features().toList.head.asInstanceOf[SimpleFeature]
       val timeSeries = decodeTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
+
+      val total = timeSeries.map {
+        case (dateTime, count) =>
+          count should be equalTo 2L
+          count}.sum
+
+      total should be equalTo 48
+      timeSeries.size should be equalTo 24
+    }
+
+    "correctly bin off of time intervals - json" in {
+      val ds = createDataStore(sft, 4)
+      val encodedFeatures = (0 until 48).toArray.map {
+        i => Array(i.toString, "1.0", new DateTime(s"2012-01-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
+      }
+      val fs = loadFeatures(ds, sft, encodedFeatures)
+
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")
+
+
+      val results = fs.getFeatures(q)
+      val sf = results.features().toList.head.asInstanceOf[SimpleFeature]
+      val timeSeries = jsonToTimeSeries(sf.getAttribute(TIME_SERIES).asInstanceOf[String])
 
       val total = timeSeries.map {
         case (dateTime, count) =>
@@ -205,7 +265,7 @@ class TemporalDensityIteratorTest extends Specification {
     }
 
     "query dtg bounds not in DataStore" in {
-      val ds = createDataStore(sft, 3)
+      val ds = createDataStore(sft, 5)
       val encodedFeatures = (0 until 48).toArray.map {
         i => Array(i.toString, "1.0", new DateTime(s"2012-02-01T${i%24}:00:00", DateTimeZone.UTC).toDate, "POINT(-77 38)")
       }
@@ -219,11 +279,23 @@ class TemporalDensityIteratorTest extends Specification {
     }
 
     "nothing to query over" in {
-      val ds = createDataStore(sft, 4)
+      val ds = createDataStore(sft, 6)
       val encodedFeatures = new Array[Array[_]](0)
       val fs = loadFeatures(ds, sft, encodedFeatures)
 
       val q = getQuery("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")
+
+      val results = fs.getFeatures(q)
+      val sfList = results.features().toList
+      sfList.length should be equalTo 0
+    }
+
+    "nothing to query over - json" in {
+      val ds = createDataStore(sft, 7)
+      val encodedFeatures = new Array[Array[_]](0)
+      val fs = loadFeatures(ds, sft, encodedFeatures)
+
+      val q = getQueryJSON("(dtg between '2012-01-01T00:00:00.000Z' AND '2012-01-02T00:00:00.000Z') and BBOX(geom, -80, 33, -70, 40)")
 
       val results = fs.getFeatures(q)
       val sfList = results.features().toList

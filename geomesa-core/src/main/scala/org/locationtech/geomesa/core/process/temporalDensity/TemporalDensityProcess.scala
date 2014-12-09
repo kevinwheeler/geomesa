@@ -12,11 +12,6 @@ import org.geotools.process.factory.{DescribeParameter, DescribeProcess, Describ
 import org.geotools.util.NullProgressListener
 import org.joda.time.{DateTime, Interval}
 import org.locationtech.geomesa.core.index.QueryHints
-import org.locationtech.geomesa.core.iterators.TemporalDensityIterator
-import org.locationtech.geomesa.core.iterators.TemporalDensityIterator._
-import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
-import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
-import org.locationtech.geomesa.utils.geotools.Conversions._
 import org.opengis.feature.Feature
 import org.opengis.feature.simple.SimpleFeature
 
@@ -24,8 +19,8 @@ import scala.util.Random
 import scala.util.parsing.json.JSONObject
 
 @DescribeProcess(
-  title = "Temporal Density Query",
-  description = "Determines the number of query results at different time buckets within an interval"
+  title = "Temporal Density Process",
+  description = "Returns a histogram of where the data points fall temporally."
 )
 class TemporalDensityProcess extends Logging {
 
@@ -39,11 +34,11 @@ class TemporalDensityProcess extends Logging {
                @DescribeParameter(
                  name = "startDate",
                  description = "The start of the time interval over which we want result density information")
-               startDate: DateTime,
+               startDate: Date,
                @DescribeParameter(
                  name = "endDate",
                  description = "The end of the time interval over which we want result density information")
-               endDate: DateTime,
+               endDate: Date,
                @DescribeParameter(
                  name = "buckets",
                  min = 1,
@@ -57,7 +52,7 @@ class TemporalDensityProcess extends Logging {
       logger.warn("WARNING: layer name in geoserver must match feature type name in geomesa")
     }
 
-   val interval = new Interval(startDate, endDate)
+   val interval = new Interval(startDate.getTime, endDate.getTime)
 
     val visitor = new TemporalDensityVisitor(features, interval, buckets)
     features.accepts(visitor, new NullProgressListener)
@@ -86,7 +81,7 @@ class TemporalDensityVisitor(features: SimpleFeatureCollection, interval: Interv
   def setValue(r: SimpleFeatureCollection) = resultCalc = TDResult(r)
 
   def query(source: SimpleFeatureSource, query: Query) = {
-    logger.info("Running Geomesa query on source type "+source.getClass.getName)
+    logger.info("Running Geomesa temporal density process on source type " + source.getClass.getName)
     query.getHints.put(QueryHints.TEMPORAL_DENSITY_KEY, java.lang.Boolean.TRUE)
     query.getHints.put(QueryHints.TIME_INTERVAL_KEY, interval)
     query.getHints.put(QueryHints.TIME_BUCKETS_KEY, buckets)

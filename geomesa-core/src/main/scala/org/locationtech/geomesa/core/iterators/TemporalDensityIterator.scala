@@ -13,6 +13,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/*
+ * Copyright 2014 Commonwealth Computer Research, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the License);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an AS IS BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 
 package org.locationtech.geomesa.core.iterators
@@ -27,8 +42,11 @@ import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.data.{ByteSequence, Key, Value, Range => ARange}
 import org.apache.accumulo.core.iterators.{IteratorEnvironment, SortedKeyValueIterator}
 import org.apache.commons.codec.binary.Base64
+import org.codehaus.jackson.`type`.TypeReference
+import org.codehaus.jackson.map.ObjectMapper
 import org.geotools.feature.simple.SimpleFeatureBuilder
 import org.geotools.geometry.jts.JTSFactoryFinder
+import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 import org.joda.time.{DateTime, Interval}
 import org.locationtech.geomesa.core._
 import org.locationtech.geomesa.core.data.{FeatureEncoding, SimpleFeatureDecoder, SimpleFeatureEncoder}
@@ -37,6 +55,7 @@ import org.locationtech.geomesa.feature.AvroSimpleFeatureFactory
 import org.locationtech.geomesa.utils.geotools.{SimpleFeatureTypes, TimeSnap}
 import org.opengis.feature.simple.SimpleFeatureType
 
+import scala.collection.JavaConversions
 import scala.util.Random
 import scala.util.parsing.json.{JSON, JSONObject}
 
@@ -202,14 +221,15 @@ object TemporalDensityIterator extends Logging {
   }
 
   def jsonToTimeSeries(ts : String) : TimeSeries = {
-    val jsonMap = JSON.parseFull(ts).asInstanceOf[Option[Map[String, String]]].get
-    val timeSeries = new collection.mutable.HashMap[DateTime, Long]()
-    for ((k,v) <- jsonMap){
-      val date = new DateTime(k)
-      val count = v.toLong
-      timeSeries.put(date, count)
+    val objMapper: ObjectMapper = new ObjectMapper();
+    val map: ju.Map[String, Long] = objMapper.readValue(ts, new TypeReference[ju.HashMap[String, java.lang.Long]](){});
+    val ret = new collection.mutable.HashMap[DateTime, Long]()
+    for ((k,v) <- JavaConversions.mapAsScalaMap(map)){
+      val df = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+      val dateTime = df.parseDateTime(k);
+      ret.put(dateTime, v)
     }
-    return timeSeries
+    ret
   }
 
   def encodeTimeSeries(timeSeries: TimeSeries): String = {

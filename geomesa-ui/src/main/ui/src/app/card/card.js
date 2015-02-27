@@ -33,7 +33,8 @@ angular.module('geomesa.card', [])
                         params = {
                             REQUEST: "GetFeatureInfo",
                             EXCEPTIONS: "application/vnd.ogc.se_xml",
-                            BBOX: (p.lng - 0.5) + ',' + (p.lat + 0.5) + ',' + (p.lng + 0.5) + ',' + (p.lat - 0.5),
+                            //BBOX: (p.lng - 0.5) + ',' + (p.lat + 0.5) + ',' + (p.lng + 0.5) + ',' + (p.lat - 0.5),
+                            BBOX: (-180) + ',' + (90) + ',' + (180) + ',' + (-90),
                             SERVICE: "WMS",
                             INFO_FORMAT: 'application/json',
                             QUERY_LAYERS: 'geomesa:QuickStart',
@@ -49,6 +50,7 @@ angular.module('geomesa.card', [])
                         WFSResource.wfsRequest(params).$promise.then(success);
                     }
                 }, true);
+                scope.selectedPoint = {lat: -38.09, lng : -76.85};
             }
         };
     }]);

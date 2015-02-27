@@ -7,7 +7,7 @@ angular.module('geomesa', [
 
     .factory('WFSResource', ['$resource', function ($resource) {
         return $resource('http://geomesa:8080/geoserver/geomesa/wms', {}, {
-            wfsRequest: {method: 'GET', isArray: true}
+            wfsRequest: {method: 'GET', isArray: false}
         });
     }])
 

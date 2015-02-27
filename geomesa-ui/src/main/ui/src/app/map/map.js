@@ -46,7 +46,7 @@ angular.module('geomesa.map', [])
             link: function (scope, element, attrs) {
                //var baseLayer = L.tileLayer.provider('Stamen.TonerLite'),
                 var baseLayer = new ol.layer.Tile({
-                   source: new ol.source.MapQuest({layer: 'sat'})
+                   source: new ol.source.MapQuest({layer: 'osm'})
                 });
                 var wmsLayer = new ol.layer.Tile({
                     source: new ol.source.TileWMS({

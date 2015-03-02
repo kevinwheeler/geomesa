@@ -1,6 +1,6 @@
 angular.module('geomesa.card', [])
 
-    .directive('cards', [, function () {
+    .directive('cards', [function () {
         return {
             restrict: 'E',
             scope: {

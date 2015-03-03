@@ -49,7 +49,7 @@ module.exports = {
             // TODO - test only
             'vendor/bower/angular-mocks/angular-mocks.js',
         ],
-        css: ['vendor/bower/openlayers/css/ol.css'],
+        //css: [], To add vendor css files, use the main.styl file instead.
         assets: [
             'vendor/bower/font-awesome/fonts/*',
             'vendor/bower/bootstrap/fonts/*'

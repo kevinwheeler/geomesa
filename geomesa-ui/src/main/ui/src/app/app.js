@@ -5,12 +5,6 @@ angular.module('geomesa', [
     'geomesa.home'
 ])
 
-    .factory('WFSResource', ['$resource', function ($resource) {
-        return $resource('http://geomesa:8080/geoserver/geomesa/wms', {}, {
-            wfsRequest: {method: 'GET', isArray: false}
-        });
-    }])
-
     .config(['$routeProvider', function ($routeProvider) {
         // Configure route provider to transform any undefined hashes to /home.
         $routeProvider.otherwise({redirectTo: '/home'});

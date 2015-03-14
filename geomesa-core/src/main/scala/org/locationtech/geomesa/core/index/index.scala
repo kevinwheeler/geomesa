@@ -16,10 +16,8 @@
 
 package org.locationtech.geomesa.core
 
-import java.util.{List => JList}
-
 import com.typesafe.scalalogging.slf4j.Logging
-import org.apache.accumulo.core.data.{Key, Value, Range => AccRange}
+import org.apache.accumulo.core.data.{Key, Range => AccRange, Value}
 import org.geotools.data.Query
 import org.geotools.factory.Hints.{ClassKey, IntegerKey}
 import org.geotools.filter.identity.FeatureIdImpl
@@ -28,6 +26,8 @@ import org.joda.time.{DateTimeZone, DateTime}
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
 import org.opengis.feature.simple.SimpleFeatureType
 import org.opengis.filter.identity.FeatureId
+
+import scala.languageFeature.implicitConversions
 
 /**
  * These are package-wide constants.
@@ -97,6 +97,7 @@ package object index {
     val TIME_INTERVAL_KEY    = new ClassKey(classOf[org.joda.time.Interval])
     val TIME_BUCKETS_KEY     = new IntegerKey(256)
     val RETURN_ENCODED       = new ClassKey(classOf[java.lang.Boolean])
+    val MAP_AGGREGATION_KEY = new ClassKey(classOf[java.lang.String])
   }
 
   type ExplainerOutputType = ( => String) => Unit
@@ -123,7 +124,7 @@ package object index {
   }
 
   class ExplainString extends ExplainerOutputType {
-    private var string: StringBuilder = new StringBuilder()
+    private val string: StringBuilder = new StringBuilder()
     override def apply(v1: => String) = {
       string.append(v1).append('\n')
     }

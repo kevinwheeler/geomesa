@@ -21,7 +21,7 @@ import java.util.{Date, UUID}
 
 import com.vividsolutions.jts.geom.Geometry
 import org.locationtech.geomesa.core
-import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
+import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes._
 import org.locationtech.geomesa.utils.text.WKBUtils
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
 
@@ -128,37 +128,30 @@ object IndexValueEncoder {
 
   // gets a cached instance to avoid the initialization overhead
   // we use sft.toString, which includes the fields and type name, as a unique key
-  def apply(sft: SimpleFeatureType) = cache.get.getOrElseUpdate(sft.toString, createNew(sft))
+  def apply(sft: SimpleFeatureType) = {
+    val schema = getSchema(sft)
+    val key = s"${sft.getTypeName}[${schema.mkString(",")}]"
+    cache.get.getOrElseUpdate(key, new IndexValueEncoder(sft, schema))
+  }
 
   // gets the default schema, which includes ID, geom and date (if available)
   // order is important here, as it needs to match the old IndexEntry encoding
   def getDefaultSchema(sft: SimpleFeatureType): Seq[String] =
     Seq(ID_FIELD, sft.getGeometryDescriptor.getLocalName) ++ core.index.getDtgFieldName(sft)
 
-  /**
-   * Creates a new IndexValueEncoder based on the user data in the simple feature. The
-   * IndexValueEncoder does some initialization up-front, so the cached instances should be used.
-   *
-   * @param sft
-   * @return
-   */
-  private def createNew(sft: SimpleFeatureType) = {
-    import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes._
+  def getSchema(sft: SimpleFeatureType): Seq[String] = {
     import scala.collection.JavaConversions._
 
-    val schema = {
-      val defaults = getDefaultSchema(sft)
-      val descriptors =  sft.getAttributeDescriptors
-          .filter(d => Option(d.getUserData.get(OPT_INDEX_VALUE).asInstanceOf[Boolean]).getOrElse(false))
-          .map(_.getLocalName)
-      if (descriptors.isEmpty) {
-        defaults
-      } else {
-        // keep defaults first to maintain back compatibility with old IndexEntry encoding
-        defaults ++ descriptors.filterNot(defaults.contains)
-      }
+    val defaults = getDefaultSchema(sft)
+    val descriptors =  sft.getAttributeDescriptors
+        .filter(d => Option(d.getUserData.get(OPT_INDEX_VALUE).asInstanceOf[Boolean]).getOrElse(false))
+        .map(_.getLocalName)
+    if (descriptors.isEmpty) {
+      defaults
+    } else {
+      // keep defaults first to maintain back compatibility with old IndexEntry encoding
+      defaults ++ descriptors.filterNot(defaults.contains)
     }
-    new IndexValueEncoder(sft, schema)
   }
 
   /**

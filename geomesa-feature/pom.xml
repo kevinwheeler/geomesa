@@ -3,7 +3,7 @@
     <parent>
         <artifactId>geomesa-accumulo1.5</artifactId>
         <groupId>org.locationtech.geomesa</groupId>
-        <version>1.0.0-rc.4-SNAPSHOT</version>
+        <version>1.0.0-rc.5-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -35,6 +35,13 @@
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryo</artifactId>
             <version>3.0.0</version>
+            <exclusions>
+                <exclusion>
+                    <!-- excluded due to license issues -->
+                    <groupId>org.objenesis</groupId>
+                    <artifactId>objenesis</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Test dependencies -->

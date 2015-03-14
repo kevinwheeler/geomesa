@@ -19,7 +19,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.locationtech.geomesa</groupId>
     <artifactId>geomesa-accumulo1.5</artifactId>
-    <version>1.0.0-rc.4-SNAPSHOT</version>
+    <version>1.0.0-rc.5-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>GeoMesa - [Accumulo 1.5.x]</name>
 
@@ -605,11 +605,6 @@
                 <groupId>org.hsqldb</groupId>
                 <artifactId>hsqldb</artifactId>
                 <version>2.3.0</version>
-            </dependency>
-            <dependency>
-                <groupId>org.objenesis</groupId>
-                <artifactId>objenesis</artifactId>
-                <version>1.2</version>
             </dependency>
             <dependency>
                 <groupId>com.typesafe</groupId>

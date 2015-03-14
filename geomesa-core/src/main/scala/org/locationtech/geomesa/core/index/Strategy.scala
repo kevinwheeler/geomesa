@@ -25,13 +25,12 @@ import org.geotools.data.Query
 import org.geotools.filter.text.ecql.ECQL
 import org.joda.time.Interval
 import org.locationtech.geomesa.core._
-import org.locationtech.geomesa.feature.FeatureEncoding
-import FeatureEncoding.FeatureEncoding
 import org.locationtech.geomesa.core.data._
 import org.locationtech.geomesa.core.index.QueryHints._
 import org.locationtech.geomesa.core.index.QueryPlanner._
 import org.locationtech.geomesa.core.iterators.{FEATURE_ENCODING, _}
 import org.locationtech.geomesa.core.util.SelfClosingIterator
+import org.locationtech.geomesa.feature.FeatureEncoding.FeatureEncoding
 import org.locationtech.geomesa.utils.geotools.SimpleFeatureTypes
 import org.opengis.feature.simple.SimpleFeatureType
 import org.opengis.filter.Filter
@@ -56,23 +55,29 @@ trait Strategy {
     cfg.addOption(FEATURE_ENCODING, featureEncoding.toString)
   }
 
-  def configureFilter(cfg: IteratorSetting, filter: Option[Filter]) {
-    filter.foreach { f => cfg.addOption(DEFAULT_FILTER_PROPERTY_NAME, ECQL.toCQL(f)) }
+  def configureStFilter(cfg: IteratorSetting, filter: Option[Filter]) = {
+    filter.foreach { f => cfg.addOption(ST_FILTER_PROPERTY_NAME, ECQL.toCQL(f)) }
   }
 
-  def configureFeatureType(cfg: IteratorSetting, featureType: SimpleFeatureType) {
+  def configureFeatureType(cfg: IteratorSetting, featureType: SimpleFeatureType) = {
     val encodedSimpleFeatureType = SimpleFeatureTypes.encodeType(featureType)
     cfg.addOption(GEOMESA_ITERATORS_SIMPLE_FEATURE_TYPE, encodedSimpleFeatureType)
     cfg.encodeUserData(featureType.getUserData, GEOMESA_ITERATORS_SIMPLE_FEATURE_TYPE)
   }
 
-  def configureFeatureTypeName(cfg: IteratorSetting, featureType: String) {
+  def configureFeatureTypeName(cfg: IteratorSetting, featureType: String) =
     cfg.addOption(GEOMESA_ITERATORS_SFT_NAME, featureType)
+
+  def configureIndexValues(cfg: IteratorSetting, featureType: SimpleFeatureType) = {
+    val encodedSimpleFeatureType = SimpleFeatureTypes.encodeType(featureType)
+    cfg.addOption(GEOMESA_ITERATORS_SFT_INDEX_VALUE, encodedSimpleFeatureType)
   }
 
-  def configureAttributeName(cfg: IteratorSetting, attributeName: String) {
+  def configureAttributeName(cfg: IteratorSetting, attributeName: String) =
     cfg.addOption(GEOMESA_ITERATORS_ATTRIBUTE_NAME, attributeName)
-  }
+
+  def configureEcqlFilter(cfg: IteratorSetting, ecql: Option[String]) =
+    ecql.foreach(filter => cfg.addOption(GEOMESA_ITERATORS_ECQL_FILTER, filter))
 
   // returns the SimpleFeatureType for the query's transform
   def transformedSimpleFeatureType(query: Query): Option[SimpleFeatureType] = {
@@ -80,7 +85,7 @@ trait Strategy {
   }
 
   // store transform information into an Iterator's settings
-  def configureTransforms(query:Query,cfg: IteratorSetting) =
+  def configureTransforms(cfg: IteratorSetting, query:Query) =
     for {
       transformOpt  <- Option(query.getHints.get(TRANSFORMS))
       transform     = transformOpt.asInstanceOf[String]
@@ -90,45 +95,33 @@ trait Strategy {
       _             = cfg.addOption(GEOMESA_ITERATORS_TRANSFORM_SCHEMA, encodedSFType)
     } yield Unit
 
-  // assumes that it receives an iterator over data-only entries, and aggregates
-  // the values into a map of attribute, value pairs
-  def configureSimpleFeatureFilteringIterator(simpleFeatureType: SimpleFeatureType,
-                                              ecql: Option[String],
-                                              schema: String,
-                                              featureEncoding: FeatureEncoding,
-                                              query: Query): IteratorSetting = {
-    val cfg = new IteratorSetting(iteratorPriority_SimpleFeatureFilteringIterator,
-      "sffilter-" + randomPrintableString(5),
-      classOf[SimpleFeatureFilteringIterator])
+  def configureRecordTableIterator(
+      simpleFeatureType: SimpleFeatureType,
+      featureEncoding: FeatureEncoding,
+      ecql: Option[Filter],
+      query: Query): IteratorSetting = {
 
-    configureFeatureEncoding(cfg, featureEncoding)
-    configureTransforms(query,cfg)
+    val cfg = new IteratorSetting(
+      iteratorPriority_SimpleFeatureFilteringIterator,
+      classOf[RecordTableIterator].getSimpleName,
+      classOf[RecordTableIterator]
+    )
     configureFeatureType(cfg, simpleFeatureType)
-    ecql.foreach(SimpleFeatureFilteringIterator.setECQLFilter(cfg, _))
-
+    configureFeatureEncoding(cfg, featureEncoding)
+    configureEcqlFilter(cfg, ecql.map(ECQL.toCQL))
+    configureTransforms(cfg, query)
     cfg
   }
 
   def randomPrintableString(length:Int=5) : String = (1 to length).
     map(i => Random.nextPrintableChar()).mkString
 
-  def getSFFIIterCfg(iteratorConfig: IteratorConfig,
-                     featureType: SimpleFeatureType,
-                     ecql: Option[String],
-                     schema: String,
-                     featureEncoding: FeatureEncoding,
-                     query: Query): Option[IteratorSetting] = {
-    if (iteratorConfig.useSFFI) {
-      Some(configureSimpleFeatureFilteringIterator(featureType, ecql, schema, featureEncoding, query))
-    } else None
-  }
-
-  def getTopIterCfg(query: Query,
-                    geometryToCover: Geometry,
-                    schema: String,
-                    featureEncoding: FeatureEncoding,
-                    featureType: SimpleFeatureType) = {
-    if (query.getHints.containsKey(DENSITY_KEY)) {
+  def getDensityIterCfg(query: Query,
+                        geometryToCover: Geometry,
+                        schema: String,
+                        featureEncoding: FeatureEncoding,
+                        featureType: SimpleFeatureType) = query match {
+    case _ if query.getHints.containsKey(DENSITY_KEY) =>
       val clazz = classOf[DensityIterator]
 
       val cfg = new IteratorSetting(iteratorPriority_AnalysisIterator,
@@ -146,8 +139,7 @@ trait Strategy {
       configureFeatureType(cfg, featureType)
 
       Some(cfg)
-    }
-    else if (query.getHints.containsKey(TEMPORAL_DENSITY_KEY)){
+    case _ if query.getHints.containsKey(TEMPORAL_DENSITY_KEY) =>
       val clazz = classOf[TemporalDensityIterator]
 
       val cfg = new IteratorSetting(iteratorPriority_AnalysisIterator,
@@ -163,6 +155,21 @@ trait Strategy {
       configureFeatureType(cfg, featureType)
 
       Some(cfg)
-    } else None
+    case _ if query.getHints.containsKey(MAP_AGGREGATION_KEY) =>
+      val clazz = classOf[MapAggregatingIterator]
+
+      val cfg = new IteratorSetting(iteratorPriority_AnalysisIterator,
+        "topfilter-" + randomPrintableString(5),
+        clazz)
+
+      val mapAttribute = query.getHints.get(MAP_AGGREGATION_KEY).asInstanceOf[String]
+
+      MapAggregatingIterator.configure(cfg, mapAttribute)
+
+      configureFeatureEncoding(cfg, featureEncoding)
+      configureFeatureType(cfg, featureType)
+
+      Some(cfg)
+    case _ => None
   }
 }

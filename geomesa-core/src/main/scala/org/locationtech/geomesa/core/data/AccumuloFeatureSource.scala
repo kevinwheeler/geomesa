@@ -19,7 +19,7 @@ package org.locationtech.geomesa.core.data
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import com.typesafe.scalalogging.slf4j.Logging
 import org.geotools.data._
-import org.geotools.data.simple.{SimpleFeatureCollection, SimpleFeatureSource}
+import org.geotools.data.simple.{SimpleFeatureCollection, SimpleFeatureIterator, SimpleFeatureSource}
 import org.geotools.feature.visitor.{BoundsVisitor, MaxVisitor, MinVisitor}
 import org.locationtech.geomesa.core.index.QueryHints._
 import org.locationtech.geomesa.core.iterators.TemporalDensityIterator.createFeatureType
@@ -29,8 +29,7 @@ import org.locationtech.geomesa.core.process.query.QueryVisitor
 import org.locationtech.geomesa.core.process.temporalDensity.TemporalDensityVisitor
 import org.locationtech.geomesa.core.process.tube.TubeVisitor
 import org.locationtech.geomesa.core.process.unique.AttributeVisitor
-import org.locationtech.geomesa.core.util.TryLoggingFailure
-import org.locationtech.geomesa.utils.geotools.MinMaxTimeVisitor
+import org.locationtech.geomesa.core.util.{SelfClosingIterator, TryLoggingFailure}
 import org.opengis.feature.FeatureVisitor
 import org.opengis.feature.`type`.Name
 import org.opengis.feature.simple.{SimpleFeature, SimpleFeatureType}
@@ -69,10 +68,11 @@ trait AccumuloAbstractFeatureSource extends AbstractFeatureSource with Logging w
     new AccumuloFeatureCollection(self, query)
   }
 
-  override def getFeatures(query: Query): SimpleFeatureCollection = tryLoggingFailures(getFeaturesNoCache(query))
+  override def getFeatures(query: Query): SimpleFeatureCollection =
+    tryLoggingFailures(getFeaturesNoCache(query))
 
   override def getFeatures(filter: Filter): SimpleFeatureCollection =
-    tryLoggingFailures(getFeatures(new Query(getSchema().getTypeName, filter)))
+    getFeatures(new Query(getSchema().getTypeName, filter))
 }
 
 class AccumuloFeatureSource(val dataStore: AccumuloDataStore, val featureName: Name)
@@ -112,9 +112,26 @@ class AccumuloFeatureCollection(source: SimpleFeatureSource, query: Query)
 
 class CachingAccumuloFeatureCollection(source: SimpleFeatureSource, query: Query)
     extends AccumuloFeatureCollection(source, query) {
-  lazy val internalFeatures = super.features()
 
-  override def features = internalFeatures
+  lazy val featureList = {
+    // use ListBuffer for constant append time and size
+    val buf = scala.collection.mutable.ListBuffer.empty[SimpleFeature]
+    val iter = super.features
+    while (iter.hasNext) {
+      buf.append(iter.next())
+    }
+    iter.close()
+    buf
+  }
+
+  override def features = new SimpleFeatureIterator() {
+    private val iter = featureList.iterator
+    override def hasNext = iter.hasNext
+    override def next = iter.next
+    override def close = {}
+  }
+
+  override def size = featureList.length
 }
 
 trait CachingFeatureSource extends AccumuloAbstractFeatureSource {
@@ -123,14 +140,15 @@ trait CachingFeatureSource extends AccumuloAbstractFeatureSource {
   private val featureCache =
     CacheBuilder.newBuilder().build(
       new CacheLoader[Query, SimpleFeatureCollection] {
-        override def load(query: Query): SimpleFeatureCollection = {
+        override def load(query: Query): SimpleFeatureCollection =
           new CachingAccumuloFeatureCollection(self, query)
-        }
       })
 
   override def getFeatures(query: Query): SimpleFeatureCollection = {
     // geotools bug in Query.hashCode
-    if(query.getStartIndex == null) query.setStartIndex(0)
+    if (query.getStartIndex == null) {
+      query.setStartIndex(0)
+    }
     featureCache.get(query)
   }
 

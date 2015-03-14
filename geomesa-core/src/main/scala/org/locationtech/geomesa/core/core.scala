@@ -16,6 +16,8 @@
 
 package org.locationtech.geomesa
 
+import scala.collection.mutable
+
 package object core {
 
   // This first string is used as a SimpleFeature attribute name.
@@ -29,7 +31,7 @@ package object core {
   val DEFAULT_FEATURE_NAME = "geomesa.index.feature"
 
   val INGEST_TABLE_NAME                      = "geomesa.ingest.table"
-  val DEFAULT_FILTER_PROPERTY_NAME           = "geomesa.index.filter"
+  val ST_FILTER_PROPERTY_NAME                = "geomesa.index.filter"
   val DEFAULT_INTERVAL_PROPERTY_NAME         = "geomesa.index.interval"
   val DEFAULT_ATTRIBUTE_NAMES                = "geomesa.index.shapefile.attribute-names"
   val DEFAULT_CACHE_SIZE_NAME                = "geomesa.index.cache-size"
@@ -38,10 +40,32 @@ package object core {
 
   val GEOMESA_ITERATORS_SIMPLE_FEATURE_TYPE      = "geomesa.iterators.aggregator-types"
   val GEOMESA_ITERATORS_SFT_NAME                 = "geomesa.iterators.sft-name"
+  val GEOMESA_ITERATORS_SFT_INDEX_VALUE          = "geomesa.iterators.sft.index-value-schema"
   val GEOMESA_ITERATORS_ATTRIBUTE_NAME           = "geomesa.iterators.attribute.name"
   val GEOMESA_ITERATORS_ECQL_FILTER              = "geomesa.iterators.ecql-filter"
   val GEOMESA_ITERATORS_TRANSFORM                = "geomesa.iterators.transform"
   val GEOMESA_ITERATORS_TRANSFORM_SCHEMA         = "geomesa.iterators.transform.schema"
   val GEOMESA_ITERATORS_IS_DENSITY_TYPE          = "geomesa.iterators.is-density-type"
   val GEOMESA_ITERATORS_IS_TEMPORAL_DENSITY_TYPE = "geomesa.iterators.is-temporal-density-type"
+
+  /**
+   * Sums the values by key and returns a map containing all of the keys in the maps, with values
+   * equal to the sum of all of the values for that key in the maps.
+   * Sums with and aggregates the valueMaps into the aggregateInto map.
+   * @param valueMaps
+   * @param aggregateInto
+   * @param num
+   * @tparam K
+   * @tparam V
+   * @return the modified aggregateInto map containing the summed values
+   */
+  private[core] def sumNumericValueMutableMaps[K, V](valueMaps: Iterable[collection.Map[K,V]],
+                                                     aggregateInto: mutable.Map[K,V] = mutable.Map[K,V]())
+                                                    (implicit num: Numeric[V]): mutable.Map[K, V] =
+    if(valueMaps.isEmpty) aggregateInto
+    else {
+      valueMaps.flatten.foldLeft(aggregateInto.withDefaultValue(num.zero)) { case (mapSoFar, (k, v)) =>
+        mapSoFar += ((k, num.plus(v, mapSoFar(k))))
+      }
+    }
 }
